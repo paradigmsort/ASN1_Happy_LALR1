@@ -1,6 +1,6 @@
 {
 module ASN1 where
-import Text.Regex
+import ASN1Lexer
 import Test.HUnit
 }
 
@@ -89,10 +89,6 @@ SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
-data ASN1Token = TypeOrModuleReferenceToken String
-               | IdentifierOrValueReferenceToken String
-               | NumberToken Integer
-               | KeywordToken String deriving (Show, Eq)
 data ASN1TypeAssignment = TypeAssignment String (ASN1ValueOrReference ASN1Type) deriving (Show, Eq)
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
@@ -107,48 +103,8 @@ data ASN1Type = BooleanType
               | SequenceType ([ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))])
               | SequenceOfType (ASN1OptionallyNamed (ASN1ValueOrReference ASN1Type)) deriving (Show, Eq)
 
-asn1LexFromRegex :: (String -> ASN1Token) -> Regex -> String -> Maybe (ASN1Token, String)
-asn1LexFromRegex f regex word = matchRegexAll regex word >>= (\(_,matched,after,_) -> Just (f matched, after))
-
-asn1Keywords = [":=","\\.\\.\\.","{","}",",","\\(","\\)","-","BOOLEAN","CHOICE","INTEGER","OF","SEQUENCE","OPTIONAL"]
-keywordToRegex :: String -> Regex
-keywordToRegex keyword = mkRegex ("^" ++ keyword)
-
-asn1KeywordLexers :: [String -> Maybe (ASN1Token, String)]
-asn1KeywordLexers = map (asn1LexFromRegex KeywordToken . keywordToRegex) asn1Keywords
-
-asn1TypeRefereceRegex = mkRegex "^[A-Z]([A-Za-z-]*[A-Za-z])?"
-asn1LexTypeOrModuleReference :: String -> Maybe (ASN1Token, String)
-asn1LexTypeOrModuleReference = asn1LexFromRegex TypeOrModuleReferenceToken asn1TypeRefereceRegex
-
-asn1IdentifierOrValueReferenceRegex = mkRegex "^[a-z]([A-Za-z-]*[A-Za-z])?"
-asn1LexIdentifierOrValueReference :: String -> Maybe (ASN1Token, String)
-asn1LexIdentifierOrValueReference = asn1LexFromRegex IdentifierOrValueReferenceToken asn1IdentifierOrValueReferenceRegex
-
-asn1NumberRegex = mkRegex "^(0|[1-9][0-9]*)"
-asn1LexNumber :: String -> Maybe (ASN1Token, String)
-asn1LexNumber = asn1LexFromRegex (NumberToken . read) asn1NumberRegex
-
-firstJust :: (a -> Maybe b) -> (a -> Maybe b) -> a -> Maybe b
-firstJust f1 f2 word = case f1 word of Just x -> Just x
-                                       Nothing -> f2 word
-
-asn1LexNext :: String -> Maybe (ASN1Token, String)
-asn1LexNext = foldl firstJust (\x -> Nothing) (asn1KeywordLexers ++ [asn1LexTypeOrModuleReference, asn1LexIdentifierOrValueReference, asn1LexNumber])
-
-whitespace = mkRegex "^ +"
-asn1Lexer :: String -> Maybe [ASN1Token]
-asn1Lexer [] = Just []
-asn1Lexer input = case asn1LexNext input of Nothing -> matchRegexAll whitespace input >>= (\(_, matched, after, _) -> asn1Lexer after)
-                                            Just (token, rest) -> asn1Lexer rest >>= (\tokens -> Just (token:tokens))
-
-maybeFail :: Maybe a -> a
-maybeFail (Just a) = a
-
 testParse :: String -> ASN1TypeAssignment  -> IO ()
-testParse input expected = assertEqual input expected (parse (maybeFail (asn1Lexer input)))
-
-testlex = error . show . maybeFail . asn1Lexer
+testParse input expected = assertEqual input expected (parse (alexScanTokens input))
 
 tests = [testParse "TypeA := BOOLEAN"
                    (TypeAssignment "TypeA" (Value BooleanType)),
@@ -168,8 +124,7 @@ tests = [testParse "TypeA := BOOLEAN"
                    (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType)),Required (WithName "boolB" (Value BooleanType))]))),
          testParse "TypeA := SEQUENCE { boolA BOOLEAN OPTIONAL }"
                    (TypeAssignment "TypeA" (Value (SequenceType [Optional (WithName "boolA" (Value BooleanType))])))
-        ]
+        ] ++ lexerTests
 
-main = do
-    foldr (>>) (putStrLn "OK") tests
+main = foldr (>>) (putStrLn "OK") tests
 }
