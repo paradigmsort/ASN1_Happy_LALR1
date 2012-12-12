@@ -10,7 +10,6 @@ $nonzero = 1-9
 $upper = [A-Z]
 $lower = [a-z]
 $alpha = [A-Za-z]
-$ident = [A-Za-z\-]
 
 tokens :-
     $white                          ;
@@ -27,8 +26,8 @@ tokens :-
     OF                              { KeywordToken }
     OPTIONAL                        { KeywordToken }
     SEQUENCE                        { KeywordToken }
-    $upper | $upper $ident* $alpha  { TypeOrModuleReferenceToken }
-    $lower | $lower $ident* $alpha  { IdentifierOrValueReferenceToken }
+    $upper (\- $alpha | $alpha )*   { TypeOrModuleReferenceToken }
+    $lower (\- $alpha | $alpha )*   { IdentifierOrValueReferenceToken }
     0      | $nonzero $digit*       { NumberToken . read }
 
 {
@@ -54,10 +53,12 @@ lexerTests = [testLex "TypeA := BOOLEAN"
                       [KeywordToken "SEQUENCE", KeywordToken "OF", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN"],
               testLex "SEQUENCE { }"
                       [KeywordToken "SEQUENCE", KeywordToken "{", KeywordToken "}"],
-              testLex "SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
-                      [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken ",", IdentifierOrValueReferenceToken "boolB", KeywordToken "BOOLEAN", KeywordToken "}"],
+              testLex "SEQUENCE { bool-A BOOLEAN , boolB BOOLEAN }"
+                      [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "bool-A", KeywordToken "BOOLEAN", KeywordToken ",", IdentifierOrValueReferenceToken "boolB", KeywordToken "BOOLEAN", KeywordToken "}"],
               testLex "SEQUENCE { boolA BOOLEAN OPTIONAL }"
-                      [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken "OPTIONAL", KeywordToken "}"]
+                      [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken "OPTIONAL", KeywordToken "}"],
+              testLex "test--test"
+                      [IdentifierOrValueReferenceToken "test", KeywordToken "-", KeywordToken "-", IdentifierOrValueReferenceToken "test"]
               ]
 
 }
