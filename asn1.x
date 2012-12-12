@@ -41,23 +41,23 @@ testLex :: String -> [ASN1Token] -> IO()
 testLex input expected = assertEqual input expected (alexScanTokens input)
 
 lexerTests = [testLex "TypeA := BOOLEAN"
-                     [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", KeywordToken "BOOLEAN"],
-             testLex "TypeA := TypeB"
-                     [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", TypeOrModuleReferenceToken "TypeB"],
-             testLex "TypeA := CHOICE { bool BOOLEAN }"
-                     [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", KeywordToken "CHOICE", KeywordToken "{", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "}"],
-             testLex "INTEGER { two(2) }"
-                     [KeywordToken "INTEGER", KeywordToken "{", IdentifierOrValueReferenceToken "two", KeywordToken "(", NumberToken 2, KeywordToken ")", KeywordToken "}"],
-             testLex "SEQUENCE OF TypeB"
-                     [KeywordToken "SEQUENCE", KeywordToken "OF", TypeOrModuleReferenceToken "TypeB"],
-             testLex "SEQUENCE OF bool BOOLEAN"
-                     [KeywordToken "SEQUENCE", KeywordToken "OF", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN"],
-             testLex "SEQUENCE { }"
-                     [KeywordToken "SEQUENCE", KeywordToken "{", KeywordToken "}"],
-             testLex "SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
-                     [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken ",", IdentifierOrValueReferenceToken "boolB", KeywordToken "BOOLEAN", KeywordToken "}"],
-             testLex "SEQUENCE { boolA BOOLEAN OPTIONAL }"
-                     [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken "OPTIONAL", KeywordToken "}"]
-            ]
+                      [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", KeywordToken "BOOLEAN"],
+              testLex "TypeA := TypeB"
+                      [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", TypeOrModuleReferenceToken "TypeB"],
+              testLex "TypeA := CHOICE { bool BOOLEAN }"
+                      [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", KeywordToken "CHOICE", KeywordToken "{", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "}"],
+              testLex "INTEGER { two(2) }"
+                      [KeywordToken "INTEGER", KeywordToken "{", IdentifierOrValueReferenceToken "two", KeywordToken "(", NumberToken 2, KeywordToken ")", KeywordToken "}"],
+              testLex "SEQUENCE OF TypeB"
+                      [KeywordToken "SEQUENCE", KeywordToken "OF", TypeOrModuleReferenceToken "TypeB"],
+              testLex "SEQUENCE OF bool BOOLEAN"
+                      [KeywordToken "SEQUENCE", KeywordToken "OF", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN"],
+              testLex "SEQUENCE { }"
+                      [KeywordToken "SEQUENCE", KeywordToken "{", KeywordToken "}"],
+              testLex "SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
+                      [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken ",", IdentifierOrValueReferenceToken "boolB", KeywordToken "BOOLEAN", KeywordToken "}"],
+              testLex "SEQUENCE { boolA BOOLEAN OPTIONAL }"
+                      [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken "OPTIONAL", KeywordToken "}"]
+              ]
 
 }
