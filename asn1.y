@@ -1,0 +1,175 @@
+{
+module ASN1 where
+import Text.Regex
+import Test.HUnit
+}
+
+%name parse
+%tokentype { ASN1Token }
+%error { parseError }
+
+%token
+    TYPE_OR_MODULE_REFERENCE            { TypeOrModuleReferenceToken $$ }
+    IDENTIFIER_OR_VALUE_REFERENCE       { IdentifierOrValueReferenceToken $$ }
+    NUMBER                              { NumberToken $$ }
+    ':='                                { KeywordToken ":=" }
+    '{'                                 { KeywordToken "{" }
+    '}'                                 { KeywordToken "}" }
+    ','                                 { KeywordToken "," }
+    '('                                 { KeywordToken "(" }
+    ')'                                 { KeywordToken ")" }
+    '-'                                 { KeywordToken "-" }
+    'BOOLEAN'                           { KeywordToken "BOOLEAN" }
+    'CHOICE'                            { KeywordToken "CHOICE" }
+    'INTEGER'                           { KeywordToken "INTEGER" }
+    'OF'                                { KeywordToken "OF" }
+    'OPTIONAL'                          { KeywordToken "OPTIONAL" }
+    'SEQUENCE'                          { KeywordToken "SEQUENCE" }
+%%
+
+TypeAssignment : TYPE_OR_MODULE_REFERENCE ':=' Type { TypeAssignment $1 $3 }
+
+Type : BuiltinType { Value $1 }
+     | ReferencedType { Reference $1 }
+
+ReferencedType : DefinedType { $1 }
+
+DefinedType : TYPE_OR_MODULE_REFERENCE { $1 }
+
+NamedType : IDENTIFIER_OR_VALUE_REFERENCE Type { WithName $1 $2 }
+
+BuiltinType : BooleanType { $1 }
+            | ChoiceType { $1 }
+            | IntegerType { $1 }
+            | SequenceType { $1 }
+            | SequenceOfType { $1 }
+
+DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
+
+BooleanType : 'BOOLEAN' { BooleanType }
+
+ChoiceType : 'CHOICE' '{' AlternativeTypeLists '}' { ChoiceType $3 }
+
+AlternativeTypeLists : RootAlternativeTypeList { $1 }
+
+RootAlternativeTypeList : AlternativeTypeList { $1 }
+
+AlternativeTypeList : NamedType { [$1] }
+                    | AlternativeTypeList ',' NamedType { $1 ++ [$3] }
+
+IntegerType : 'INTEGER' { IntegerType Nothing }
+            | 'INTEGER' '{' NamedNumberList '}' { IntegerType (Just $3) }
+
+NamedNumberList : NamedNumber { [$1] }
+                | NamedNumberList ',' NamedNumber { $1 ++ [$3] }
+
+NamedNumber : IDENTIFIER_OR_VALUE_REFERENCE '(' SignedNumber ')' { WithName $1 (Value $3) }
+            | IDENTIFIER_OR_VALUE_REFERENCE '(' DefinedValue ')' { WithName $1 (Reference $3) }
+
+SignedNumber : NUMBER { $1 }
+             | '-' NUMBER { (-$2) }
+
+SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] }
+             | 'SEQUENCE' '{' ComponentTypeLists '}' { SequenceType $3 }
+
+ComponentTypeLists : ComponentTypeList { $1 }
+
+RootComponentTypeList : ComponentTypeList ',' { $1 }
+
+ComponentTypeList : ComponentType { [$1] }
+                  | RootComponentTypeList ComponentType { $1 ++ [$2] }
+
+ComponentType : NamedType { Required $1 }
+              | NamedType 'OPTIONAL' { Optional $1 }
+
+SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
+               | 'SEQUENCE' 'OF' NamedType { SequenceOfType (Named $3) }
+
+{
+parseError :: [ASN1Token] -> a
+parseError token = error ("Parse Error, remaining: " ++ show token)
+
+data ASN1Token = TypeOrModuleReferenceToken String
+               | IdentifierOrValueReferenceToken String
+               | NumberToken Integer
+               | KeywordToken String deriving (Show, Eq)
+data ASN1TypeAssignment = TypeAssignment String (ASN1ValueOrReference ASN1Type) deriving (Show, Eq)
+data ASN1WithName a = WithName String a deriving (Show, Eq)
+data ASN1OptionallyNamed a = Unnamed a
+                           | Named (ASN1WithName a) deriving (Show, Eq)
+data ASN1ValueOrReference a = Value a 
+                            | Reference String deriving (Show, Eq)
+data ASN1RequiredOrOptional a = Required a
+                              | Optional a deriving (Show, Eq)
+data ASN1Type = BooleanType
+              | ChoiceType [ASN1WithName (ASN1ValueOrReference ASN1Type)]
+              | IntegerType (Maybe [ASN1WithName (ASN1ValueOrReference Integer)])
+              | SequenceType ([ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))])
+              | SequenceOfType (ASN1OptionallyNamed (ASN1ValueOrReference ASN1Type)) deriving (Show, Eq)
+
+asn1LexFromRegex :: (String -> ASN1Token) -> Regex -> String -> Maybe (ASN1Token, String)
+asn1LexFromRegex f regex word = matchRegexAll regex word >>= (\(_,matched,after,_) -> Just (f matched, after))
+
+asn1Keywords = [":=","\\.\\.\\.","{","}",",","\\(","\\)","-","BOOLEAN","CHOICE","INTEGER","OF","SEQUENCE","OPTIONAL"]
+keywordToRegex :: String -> Regex
+keywordToRegex keyword = mkRegex ("^" ++ keyword)
+
+asn1KeywordLexers :: [String -> Maybe (ASN1Token, String)]
+asn1KeywordLexers = map (asn1LexFromRegex KeywordToken . keywordToRegex) asn1Keywords
+
+asn1TypeRefereceRegex = mkRegex "^[A-Z]([A-Za-z-]*[A-Za-z])?"
+asn1LexTypeOrModuleReference :: String -> Maybe (ASN1Token, String)
+asn1LexTypeOrModuleReference = asn1LexFromRegex TypeOrModuleReferenceToken asn1TypeRefereceRegex
+
+asn1IdentifierOrValueReferenceRegex = mkRegex "^[a-z]([A-Za-z-]*[A-Za-z])?"
+asn1LexIdentifierOrValueReference :: String -> Maybe (ASN1Token, String)
+asn1LexIdentifierOrValueReference = asn1LexFromRegex IdentifierOrValueReferenceToken asn1IdentifierOrValueReferenceRegex
+
+asn1NumberRegex = mkRegex "^(0|[1-9][0-9]*)"
+asn1LexNumber :: String -> Maybe (ASN1Token, String)
+asn1LexNumber = asn1LexFromRegex (NumberToken . read) asn1NumberRegex
+
+firstJust :: (a -> Maybe b) -> (a -> Maybe b) -> a -> Maybe b
+firstJust f1 f2 word = case f1 word of Just x -> Just x
+                                       Nothing -> f2 word
+
+asn1LexNext :: String -> Maybe (ASN1Token, String)
+asn1LexNext = foldl firstJust (\x -> Nothing) (asn1KeywordLexers ++ [asn1LexTypeOrModuleReference, asn1LexIdentifierOrValueReference, asn1LexNumber])
+
+whitespace = mkRegex "^ +"
+asn1Lexer :: String -> Maybe [ASN1Token]
+asn1Lexer [] = Just []
+asn1Lexer input = case asn1LexNext input of Nothing -> matchRegexAll whitespace input >>= (\(_, matched, after, _) -> asn1Lexer after)
+                                            Just (token, rest) -> asn1Lexer rest >>= (\tokens -> Just (token:tokens))
+
+maybeFail :: Maybe a -> a
+maybeFail (Just a) = a
+
+testParse :: String -> ASN1TypeAssignment  -> IO ()
+testParse input expected = assertEqual input expected (parse (maybeFail (asn1Lexer input)))
+
+testlex = error . show . maybeFail . asn1Lexer
+
+tests = [testParse "TypeA := BOOLEAN"
+                   (TypeAssignment "TypeA" (Value BooleanType)),
+         testParse "TypeA := TypeB"
+                   (TypeAssignment "TypeA" (Reference "TypeB")),
+         testParse "TypeA := CHOICE { bool BOOLEAN }"
+                   (TypeAssignment "TypeA" (Value (ChoiceType [WithName "bool" (Value BooleanType)]))),
+         testParse "TypeA := INTEGER { two(2) }"
+                   (TypeAssignment "TypeA" (Value (IntegerType (Just [WithName "two" (Value 2)])))),
+         testParse "TypeA := SEQUENCE OF TypeB"
+                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Reference "TypeB"))))),
+         testParse "TypeA := SEQUENCE OF bool BOOLEAN"
+                   (TypeAssignment "TypeA" (Value (SequenceOfType (Named (WithName "bool" (Value BooleanType)))))),
+         testParse "TypeA := SEQUENCE { }"
+                   (TypeAssignment "TypeA" (Value (SequenceType []))),
+         testParse "TypeA := SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
+                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType)),Required (WithName "boolB" (Value BooleanType))]))),
+         testParse "TypeA := SEQUENCE { boolA BOOLEAN OPTIONAL }"
+                   (TypeAssignment "TypeA" (Value (SequenceType [Optional (WithName "boolA" (Value BooleanType))])))
+        ]
+
+main = do
+    foldr (>>) (putStrLn "OK") tests
+}
