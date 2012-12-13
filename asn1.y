@@ -13,6 +13,7 @@ import Test.HUnit
     IDENTIFIER_OR_VALUE_REFERENCE       { IdentifierOrValueReferenceToken $$ }
     NUMBER                              { NumberToken $$ }
     ':='                                { KeywordToken ":=" }
+    '...'                               { KeywordToken "..." }
     '{'                                 { KeywordToken "{" }
     '}'                                 { KeywordToken "}" }
     ','                                 { KeywordToken "," }
@@ -72,12 +73,31 @@ SignedNumber : NUMBER { $1 }
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { SequenceType $3 }
 
-ComponentTypeLists : ComponentTypeList { $1 }
+ExtensionAndException : '...' {}
 
-RootComponentTypeList : ComponentTypeList ',' { $1 }
+OptionalExtensionMarker : {- Empty -} {}
+                        | ExtensionEndMarker {}
+
+ComponentTypeLists : RootComponentTypeList { $1 }
+                   | RootComponentTypeList ',' ExtensionAndException ExtensionAdditions OptionalExtensionMarker { $1 }
+                   | RootComponentTypeList ',' ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' RootComponentTypeList { $1 ++ $7 }
+                   | ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' RootComponentTypeList { $5 }
+                   | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
+
+RootComponentTypeList : ComponentTypeList { $1 }
+
+ExtensionEndMarker : ',' '...' {}
+
+ExtensionAdditions : {- Empty -} { [] }
+                   | ',' ExtensionAdditionList { $2 }
+
+ExtensionAdditionList : ExtensionAddition { [$1] }
+                      | ExtensionAdditionList ',' ExtensionAddition { $1 ++ [$3] }
+
+ExtensionAddition : ComponentType { $1 }
 
 ComponentTypeList : ComponentType { [$1] }
-                  | RootComponentTypeList ComponentType { $1 ++ [$2] }
+                  | ComponentTypeList ',' ComponentType { $1 ++ [$3] }
 
 ComponentType : NamedType { Required $1 }
               | NamedType 'OPTIONAL' { Optional $1 }

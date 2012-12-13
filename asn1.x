@@ -14,6 +14,7 @@ $alpha = [A-Za-z]
 tokens :-
     $white                          ;
     :=                              { KeywordToken }
+    \.\.\.                          { KeywordToken }
     \{                              { KeywordToken }
     \}                              { KeywordToken }
     \,                              { KeywordToken }
@@ -58,7 +59,9 @@ lexerTests = [testLex "TypeA := BOOLEAN"
               testLex "SEQUENCE { boolA BOOLEAN OPTIONAL }"
                       [KeywordToken "SEQUENCE", KeywordToken "{", IdentifierOrValueReferenceToken "boolA", KeywordToken "BOOLEAN", KeywordToken "OPTIONAL", KeywordToken "}"],
               testLex "test--test"
-                      [IdentifierOrValueReferenceToken "test", KeywordToken "-", KeywordToken "-", IdentifierOrValueReferenceToken "test"]
+                      [IdentifierOrValueReferenceToken "test", KeywordToken "-", KeywordToken "-", IdentifierOrValueReferenceToken "test"],
+              testLex "test..."
+                      [IdentifierOrValueReferenceToken "test", KeywordToken "..."]
               ]
 
 }
