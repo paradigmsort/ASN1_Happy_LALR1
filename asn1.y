@@ -88,7 +88,6 @@ ComponentTypeLists : ComponentTypeList { $1 }
                    | ExtensionAndException OptionalExtensionMarker { [] }
                    | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
 
-
 {-
 --Irrelevant production that stops us from extending the list if reduced (shift/reduce conflict)
 --Replaced directly with ComponentTypeList
@@ -96,7 +95,6 @@ RootComponentTypeList : ComponentTypeList { $1 }
 -}
 
 ExtensionEndMarker : ',' '...' {}
-
 
 ExtensionAdditions : ',' ExtensionAdditionList { $2 }
 {-                 | {- Empty -} { [] } -- Empty production removed and replaced with literal expansion in ComponentTypeLists-}
