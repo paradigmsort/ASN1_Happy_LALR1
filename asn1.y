@@ -84,8 +84,9 @@ ComponentTypeLists : ComponentTypeList { $1 }
                    | ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $5 }
                    | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
 
-{- Irrelevant production gets in the way of ComponentTypeListWithComma
-   Replaced directly with ComponentTypeList
+{-
+--Irrelevant production that stops us from extending the list if reduced
+--Replaced directly with ComponentTypeList
 RootComponentTypeList : ComponentTypeList { $1 }
 -}
 
