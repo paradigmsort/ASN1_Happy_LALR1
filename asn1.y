@@ -70,8 +70,8 @@ NamedNumber : IDENTIFIER_OR_VALUE_REFERENCE '(' SignedNumber ')' { WithName $1 (
 SignedNumber : NUMBER { $1 }
              | '-' NUMBER { (-$2) }
 
-SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] }
-             | 'SEQUENCE' '{' ComponentTypeLists '}' { SequenceType $3 }
+SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
+             | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
 
 ExtensionAndException : '...' {}
 
@@ -81,19 +81,19 @@ OptionalExtensionMarker : {- Empty -} {}
                         | ExtensionEndMarker {}
 -}
 
-ComponentTypeLists : ComponentTypeList { $1 }
-                   | ComponentTypeList ',' ExtensionAndException { $1 }
-                   | ComponentTypeList ',' ExtensionAndException ',' '...' { $1 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions { $1 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma  '...' { $1 }
-                   | ComponentTypeList ',' ExtensionAndException ',' '...' ',' ComponentTypeList { $1 ++ $7 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { $1 ++ $7 }
-                   | ExtensionAndException ',' '...' ',' ComponentTypeList { $5 }
-                   | ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { $5 }
-                   | ExtensionAndException { [] }
-                   | ExtensionAndException ',' '...' { [] }
-                   | ExtensionAndException ExtensionAdditions { [] }
-                   | ExtensionAndException ExtensionAdditionsWithComma '...' { [] }
+ComponentTypeLists : ComponentTypeList { SequenceType $1 [] [] }
+                   | ComponentTypeList ',' ExtensionAndException { SequenceType $1 [] [] }
+                   | ComponentTypeList ',' ExtensionAndException ',' '...' { SequenceType $1 [] [] }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions { SequenceType $1 [] [] }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma  '...' { SequenceType $1 [] []}
+                   | ComponentTypeList ',' ExtensionAndException ',' '...' ',' ComponentTypeList { SequenceType $1 [] $7 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { SequenceType $1 [] $7 }
+                   | ExtensionAndException ',' '...' ',' ComponentTypeList { SequenceType [] [] $5 }
+                   | ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { SequenceType [] [] $5 }
+                   | ExtensionAndException { SequenceType [] [] []}
+                   | ExtensionAndException ',' '...' { SequenceType [] [] [] }
+                   | ExtensionAndException ExtensionAdditions { SequenceType [] [] [] }
+                   | ExtensionAndException ExtensionAdditionsWithComma '...' { SequenceType [] [] [] }
 
 {-
 --Irrelevant production that stops us from extending the list if reduced (shift/reduce conflict)
@@ -142,7 +142,11 @@ data ASN1RequiredOrOptional a = Required a
 data ASN1Type = BooleanType
               | ChoiceType [ASN1WithName (ASN1ValueOrReference ASN1Type)]
               | IntegerType (Maybe [ASN1WithName (ASN1ValueOrReference Integer)])
-              | SequenceType ([ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))])
+              | SequenceType {
+                               preExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))],
+                               extensonAdditions :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))],
+                               postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))]
+                             }
               | SequenceOfType (ASN1OptionallyNamed (ASN1ValueOrReference ASN1Type)) deriving (Show, Eq)
 
 testParse :: String -> ASN1TypeAssignment  -> IO ()
@@ -161,13 +165,15 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE OF bool BOOLEAN"
                    (TypeAssignment "TypeA" (Value (SequenceOfType (Named (WithName "bool" (Value BooleanType)))))),
          testParse "TypeA := SEQUENCE { }"
-                   (TypeAssignment "TypeA" (Value (SequenceType []))),
+                   (TypeAssignment "TypeA" (Value (SequenceType [] [] []))),
          testParse "TypeA := SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType)),Required (WithName "boolB" (Value BooleanType))]))),
+                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType)),Required (WithName "boolB" (Value BooleanType))] [] []))),
          testParse "TypeA := SEQUENCE { boolA BOOLEAN OPTIONAL }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [Optional (WithName "boolA" (Value BooleanType))]))),
+                   (TypeAssignment "TypeA" (Value (SequenceType [Optional (WithName "boolA" (Value BooleanType))] [] []))),
          testParse "TypeA := SEQUENCE { boolA BOOLEAN, ... }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType))])))
+                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType))] [] []))),
+         testParse "TypeA := SEQUENCE { ... , ... , boolA BOOLEAN }"
+                   (TypeAssignment "TypeA" (Value (SequenceType [] [] [Required (WithName "boolA" (Value BooleanType))])))
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
