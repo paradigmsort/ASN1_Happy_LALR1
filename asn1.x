@@ -15,6 +15,8 @@ tokens :-
     $white                          ;
     :=                              { KeywordToken }
     \.\.\.                          { KeywordToken }
+    \[\[                            { KeywordToken }
+    \]\]                            { KeywordToken }
     \{                              { KeywordToken }
     \}                              { KeywordToken }
     \,                              { KeywordToken }
@@ -61,7 +63,9 @@ lexerTests = [testLex "TypeA := BOOLEAN"
               testLex "test--test"
                       [IdentifierOrValueReferenceToken "test", KeywordToken "-", KeywordToken "-", IdentifierOrValueReferenceToken "test"],
               testLex "test..."
-                      [IdentifierOrValueReferenceToken "test", KeywordToken "..."]
+                      [IdentifierOrValueReferenceToken "test", KeywordToken "..."],
+              testLex "test[[[["
+                      [IdentifierOrValueReferenceToken "test", KeywordToken "[[", KeywordToken "[["]
               ]
 
 }
