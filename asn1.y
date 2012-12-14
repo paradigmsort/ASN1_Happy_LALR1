@@ -87,16 +87,16 @@ OptionalExtensionMarker : {- Empty -} {}
 ComponentTypeLists : ComponentTypeList { SequenceType $1 [] [] }
                    | ComponentTypeList ',' ExtensionAndException { SequenceType $1 [] [] }
                    | ComponentTypeList ',' ExtensionAndException ',' '...' { SequenceType $1 [] [] }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions { SequenceType $1 [] [] }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma  '...' { SequenceType $1 [] []}
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions { SequenceType $1 $4 [] }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma  '...' { SequenceType $1 $4 []}
                    | ComponentTypeList ',' ExtensionAndException ',' '...' ',' ComponentTypeList { SequenceType $1 [] $7 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { SequenceType $1 [] $7 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { SequenceType $1 $4 $7 }
                    | ExtensionAndException ',' '...' ',' ComponentTypeList { SequenceType [] [] $5 }
-                   | ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { SequenceType [] [] $5 }
+                   | ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { SequenceType [] $2 $5 }
                    | ExtensionAndException { SequenceType [] [] []}
                    | ExtensionAndException ',' '...' { SequenceType [] [] [] }
-                   | ExtensionAndException ExtensionAdditions { SequenceType [] [] [] }
-                   | ExtensionAndException ExtensionAdditionsWithComma '...' { SequenceType [] [] [] }
+                   | ExtensionAndException ExtensionAdditions { SequenceType [] $2 [] }
+                   | ExtensionAndException ExtensionAdditionsWithComma '...' { SequenceType [] $2 [] }
 
 {-
 --Irrelevant production that stops us from extending the list if reduced (shift/reduce conflict)
@@ -113,7 +113,7 @@ ExtensionAdditions : ',' ExtensionAdditionList { $2 }
 {-                 | {- Empty -} { [] } -- Empty production removed and replaced with literal expansion in ComponentTypeLists-}
 
 --New productions to give us +1 lookahead in this case by always shifting the comma
-ExtensionAdditionsWithComma : ',' ExtensionAdditionListWithComma { $1 }
+ExtensionAdditionsWithComma : ',' ExtensionAdditionListWithComma { $2 }
 ExtensionAdditionListWithComma : ExtensionAdditionList ',' { $1 }
 
 ExtensionAdditionList : ExtensionAddition { [$1] }
@@ -182,7 +182,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE { boolA BOOLEAN, ... }"
                    (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType))] [] []))),
          testParse "TypeA := SEQUENCE { ... , ... , boolA BOOLEAN }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [] [] [Required (WithName "boolA" (Value BooleanType))])))
+                   (TypeAssignment "TypeA" (Value (SequenceType [] [] [Required (WithName "boolA" (Value BooleanType))]))),
+         testParse "TypeA := SEQUENCE { ... , boolA BOOLEAN , ... }"
+                   (TypeAssignment "TypeA" (Value (SequenceType [] [[Required (WithName "boolA" (Value BooleanType))]] [])))
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
