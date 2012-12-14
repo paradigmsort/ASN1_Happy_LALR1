@@ -75,18 +75,25 @@ SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] }
 
 ExtensionAndException : '...' {}
 
+{- 
+--Replaced directly with literal tokens for ExtensionEndMarker (',' '...') or nothing in ComponentTypeLists
 OptionalExtensionMarker : {- Empty -} {}
                         | ExtensionEndMarker {}
+-}
 
 ComponentTypeLists : ComponentTypeList { $1 }
-                   | ComponentTypeList ',' ExtensionAndException OptionalExtensionMarker { $1 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions OptionalExtensionMarker { $1 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionEndMarker ',' ComponentTypeList { $1 ++ $6 }
-                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $1 ++ $7 }
-                   | ExtensionAndException ExtensionEndMarker ',' ComponentTypeList { $4 }
-                   | ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $5 }
-                   | ExtensionAndException OptionalExtensionMarker { [] }
-                   | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
+                   | ComponentTypeList ',' ExtensionAndException { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ',' '...' { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma  '...' { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ',' '...' ',' ComponentTypeList { $1 ++ $7 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { $1 ++ $7 }
+                   | ExtensionAndException ',' '...' ',' ComponentTypeList { $5 }
+                   | ExtensionAndException ExtensionAdditionsWithComma '...' ',' ComponentTypeList { $5 }
+                   | ExtensionAndException { [] }
+                   | ExtensionAndException ',' '...' { [] }
+                   | ExtensionAndException ExtensionAdditions { [] }
+                   | ExtensionAndException ExtensionAdditionsWithComma '...' { [] }
 
 {-
 --Irrelevant production that stops us from extending the list if reduced (shift/reduce conflict)
@@ -94,13 +101,20 @@ ComponentTypeLists : ComponentTypeList { $1 }
 RootComponentTypeList : ComponentTypeList { $1 }
 -}
 
+{-
+--Replaced directly with literal tokens in ComponentTypeLists
 ExtensionEndMarker : ',' '...' {}
+-}
 
 ExtensionAdditions : ',' ExtensionAdditionList { $2 }
 {-                 | {- Empty -} { [] } -- Empty production removed and replaced with literal expansion in ComponentTypeLists-}
 
+--New productions to give us +1 lookahead in this case by always shifting the comma
+ExtensionAdditionsWithComma : ',' ExtensionAdditionListWithComma { $1 }
+ExtensionAdditionListWithComma : ExtensionAdditionList ',' { $1 }
+
 ExtensionAdditionList : ExtensionAddition { [$1] }
-                      | ExtensionAdditionList ',' ExtensionAddition { $1 ++ [$3] }
+                      | ExtensionAdditionListWithComma ExtensionAddition { $1 ++ [$2] }
 
 ExtensionAddition : ComponentType { $1 }
 
