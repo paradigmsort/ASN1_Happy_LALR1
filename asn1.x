@@ -23,6 +23,7 @@ tokens :-
     \(                              { KeywordToken }
     \)                              { KeywordToken }
     \-                              { KeywordToken }
+    :                               { KeywordToken }
     BOOLEAN                         { KeywordToken }
     CHOICE                          { KeywordToken }
     INTEGER                         { KeywordToken }
@@ -65,7 +66,9 @@ lexerTests = [testLex "TypeA := BOOLEAN"
               testLex "test..."
                       [IdentifierOrValueReferenceToken "test", KeywordToken "..."],
               testLex "test[[[["
-                      [IdentifierOrValueReferenceToken "test", KeywordToken "[[", KeywordToken "[["]
+                      [IdentifierOrValueReferenceToken "test", KeywordToken "[[", KeywordToken "[["],
+              testLex "[[ 1: bool BOOLEAN ]]"
+                      [KeywordToken "[[", NumberToken 1, KeywordToken ":", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "]]"]
               ]
 
 }

@@ -14,12 +14,15 @@ import Test.HUnit
     NUMBER                              { NumberToken $$ }
     ':='                                { KeywordToken ":=" }
     '...'                               { KeywordToken "..." }
+    '[['                                { KeywordToken "[[" }
+    ']]'                                { KeywordToken "]]" }
     '{'                                 { KeywordToken "{" }
     '}'                                 { KeywordToken "}" }
     ','                                 { KeywordToken "," }
     '('                                 { KeywordToken "(" }
     ')'                                 { KeywordToken ")" }
     '-'                                 { KeywordToken "-" }
+    ':'                                 { KeywordToken ":" }
     'BOOLEAN'                           { KeywordToken "BOOLEAN" }
     'CHOICE'                            { KeywordToken "CHOICE" }
     'INTEGER'                           { KeywordToken "INTEGER" }
@@ -116,7 +119,13 @@ ExtensionAdditionListWithComma : ExtensionAdditionList ',' { $1 }
 ExtensionAdditionList : ExtensionAddition { [$1] }
                       | ExtensionAdditionListWithComma ExtensionAddition { $1 ++ [$2] }
 
-ExtensionAddition : ComponentType { $1 }
+ExtensionAddition : ComponentType { [$1] }
+                  | ExtensionAdditionGroup { $1 }
+
+ExtensionAdditionGroup : '[[' VersionNumber ComponentTypeList ']]' { $3 }
+
+VersionNumber : {- Empty -} {}
+              | NUMBER ':' {}
 
 ComponentTypeList : ComponentType { [$1] }
                   | ComponentTypeList ',' ComponentType { $1 ++ [$3] }
@@ -144,7 +153,7 @@ data ASN1Type = BooleanType
               | IntegerType (Maybe [ASN1WithName (ASN1ValueOrReference Integer)])
               | SequenceType {
                                preExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))],
-                               extensonAdditions :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))],
+                               extensonAdditions :: [[ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))]],
                                postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))]
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1ValueOrReference ASN1Type)) deriving (Show, Eq)
