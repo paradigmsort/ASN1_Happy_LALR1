@@ -75,6 +75,7 @@ SignedNumber : NUMBER { $1 }
 
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
+          -- | 'SEQUENCE' '{' ExtensionAndException OptionalExtensionMarker '}' -- Covered below by empty ExtensionAdditions
 
 ExtensionAndException : '...' {}
 
