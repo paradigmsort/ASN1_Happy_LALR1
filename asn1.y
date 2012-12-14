@@ -186,7 +186,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE { ... , boolA BOOLEAN , ... }"
                    (TypeAssignment "TypeA" (Value (SequenceType [] [[Required (WithName "boolA" (Value BooleanType))]] []))),
          testParse "TypeA := SEQUENCE OF CHOICE { b BOOLEAN , i INTEGER }"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (ChoiceType [WithName "b" (Value BooleanType), WithName "i" (Value (IntegerType Nothing))]))))))
+                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (ChoiceType [WithName "b" (Value BooleanType), WithName "i" (Value (IntegerType Nothing))])))))),
+         testParse "TypeA := SEQUENCE OF SEQUENCE { b BOOLEAN, ... , ...}"
+                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (SequenceType [Required (WithName "b" (Value BooleanType))] [] []))))))
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
