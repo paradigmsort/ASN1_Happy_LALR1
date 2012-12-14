@@ -79,10 +79,15 @@ OptionalExtensionMarker : {- Empty -} {}
                         | ExtensionEndMarker {}
 
 ComponentTypeLists : ComponentTypeList { $1 }
+                   | ComponentTypeList ',' ExtensionAndException OptionalExtensionMarker { $1 }
                    | ComponentTypeList ',' ExtensionAndException ExtensionAdditions OptionalExtensionMarker { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionEndMarker ',' ComponentTypeList { $1 ++ $6 }
                    | ComponentTypeList ',' ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $1 ++ $7 }
+                   | ExtensionAndException ExtensionEndMarker ',' ComponentTypeList { $4 }
                    | ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $5 }
+                   | ExtensionAndException OptionalExtensionMarker { [] }
                    | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
+
 
 {-
 --Irrelevant production that stops us from extending the list if reduced (shift/reduce conflict)
@@ -92,8 +97,9 @@ RootComponentTypeList : ComponentTypeList { $1 }
 
 ExtensionEndMarker : ',' '...' {}
 
-ExtensionAdditions : {- Empty -} { [] }
-                   | ',' ExtensionAdditionList { $2 }
+
+ExtensionAdditions : ',' ExtensionAdditionList { $2 }
+{-                 | {- Empty -} { [] } -- Empty production removed and replaced with literal expansion in ComponentTypeLists-}
 
 ExtensionAdditionList : ExtensionAddition { [$1] }
                       | ExtensionAdditionList ',' ExtensionAddition { $1 ++ [$3] }
