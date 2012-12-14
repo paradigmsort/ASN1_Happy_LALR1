@@ -78,13 +78,16 @@ ExtensionAndException : '...' {}
 OptionalExtensionMarker : {- Empty -} {}
                         | ExtensionEndMarker {}
 
-ComponentTypeLists : RootComponentTypeList { $1 }
-                   | RootComponentTypeList ',' ExtensionAndException ExtensionAdditions OptionalExtensionMarker { $1 }
-                   | RootComponentTypeList ',' ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' RootComponentTypeList { $1 ++ $7 }
-                   | ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' RootComponentTypeList { $5 }
+ComponentTypeLists : ComponentTypeList { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions OptionalExtensionMarker { $1 }
+                   | ComponentTypeList ',' ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $1 ++ $7 }
+                   | ExtensionAndException ExtensionAdditions ExtensionEndMarker ',' ComponentTypeList { $5 }
                    | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
 
+{- Irrelevant production gets in the way of ComponentTypeListWithComma
+   Replaced directly with ComponentTypeList
 RootComponentTypeList : ComponentTypeList { $1 }
+-}
 
 ExtensionEndMarker : ',' '...' {}
 
