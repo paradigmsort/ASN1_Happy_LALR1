@@ -85,7 +85,7 @@ ComponentTypeLists : ComponentTypeList { $1 }
                    | ExtensionAndException ExtensionAdditions OptionalExtensionMarker { [] }
 
 {-
---Irrelevant production that stops us from extending the list if reduced
+--Irrelevant production that stops us from extending the list if reduced (shift/reduce conflict)
 --Replaced directly with ComponentTypeList
 RootComponentTypeList : ComponentTypeList { $1 }
 -}
