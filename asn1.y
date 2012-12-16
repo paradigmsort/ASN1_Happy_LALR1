@@ -71,6 +71,7 @@ DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 Value : BuiltinValue { Builtin $1 }
 
 BuiltinValue : BooleanValue { $1 }
+             | IntegerValue { $1 }
 
 BooleanType : 'BOOLEAN' { BooleanType }
 
@@ -97,6 +98,9 @@ NamedNumber : IDENTIFIER_OR_VALUE_REFERENCE '(' SignedNumber ')' { WithName $1 (
 
 SignedNumber : NUMBER { $1 }
              | '-' NUMBER { (-$2) }
+
+IntegerValue : SignedNumber { IntegerValue (Builtin $1) }
+             | IDENTIFIER_OR_VALUE_REFERENCE { IntegerValue (Reference $1) }
 
 EnumeratedType : 'ENUMERATED' '{' Enumerations '}' { EnumeratedType $3 } --TODO fix
 
@@ -213,7 +217,8 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrR
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
 
-data ASN1Value = BooleanValue Bool deriving (Show, Eq)
+data ASN1Value = BooleanValue Bool 
+               | IntegerValue (ASN1BuiltinOrReference Integer) deriving (Show, Eq)
 
 testParse :: String -> [ASN1Assignment]  -> IO ()
 testParse input expected = assertEqual input expected (parse (alexScanTokens input))
@@ -261,7 +266,11 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA BOOLEAN := TRUE"
                    [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, asn1Value=Builtin (BooleanValue True)}],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", asn1Value=Builtin (BooleanValue False)}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}]
+                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", asn1Value=Builtin (BooleanValue False)}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
+         testParse "valueA INTEGER := -5"
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), asn1Value=Builtin (IntegerValue (Builtin (-5)))}],
+         testParse "valueA INTEGER {five(5)} := two"
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), asn1Value=Builtin (IntegerValue (Reference "two"))}]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
