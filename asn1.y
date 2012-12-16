@@ -35,6 +35,12 @@ import Test.HUnit
     'STRING'                            { KeywordToken "STRING" }
 %%
 
+
+AssignmentList : Assignment { [$1] }
+               | AssignmentList Assignment { $1 ++ [$2] }
+
+Assignment : TypeAssignment { $1 }
+
 TypeAssignment : TYPE_OR_MODULE_REFERENCE ':=' Type { TypeAssignment $1 $3 }
 
 Type : BuiltinType { Value $1 }
@@ -171,7 +177,7 @@ SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
-data ASN1TypeAssignment = TypeAssignment String (ASN1ValueOrReference ASN1Type) deriving (Show, Eq)
+data ASN1Assignment = TypeAssignment String (ASN1ValueOrReference ASN1Type) deriving (Show, Eq)
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
@@ -194,47 +200,49 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1ValueOrRef
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1ValueOrReference ASN1Type)) deriving (Show, Eq)
 
-testParse :: String -> ASN1TypeAssignment  -> IO ()
+testParse :: String -> [ASN1Assignment]  -> IO ()
 testParse input expected = assertEqual input expected (parse (alexScanTokens input))
 
 tests = [testParse "TypeA := BOOLEAN"
-                   (TypeAssignment "TypeA" (Value BooleanType)),
+                   [TypeAssignment "TypeA" (Value BooleanType)],
          testParse "TypeA := TypeB"
-                   (TypeAssignment "TypeA" (Reference "TypeB")),
+                   [TypeAssignment "TypeA" (Reference "TypeB")],
          testParse "TypeA := CHOICE { bool BOOLEAN }"
-                   (TypeAssignment "TypeA" (Value (ChoiceType {choices=[WithName "bool" (Value BooleanType)]}))),
+                   [TypeAssignment "TypeA" (Value (ChoiceType {choices=[WithName "bool" (Value BooleanType)]}))],
          testParse "TypeA := INTEGER { two(2) }"
-                   (TypeAssignment "TypeA" (Value (IntegerType {namedIntegerValues=Just [WithName "two" (Value 2)]}))),
+                   [TypeAssignment "TypeA" (Value (IntegerType {namedIntegerValues=Just [WithName "two" (Value 2)]}))],
          testParse "TypeA := SEQUENCE OF TypeB"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Reference "TypeB"))))),
+                   [TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Reference "TypeB"))))],
          testParse "TypeA := SEQUENCE OF bool BOOLEAN"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Named (WithName "bool" (Value BooleanType)))))),
+                   [TypeAssignment "TypeA" (Value (SequenceOfType (Named (WithName "bool" (Value BooleanType)))))],
          testParse "TypeA := SEQUENCE { }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [] [] []))),
+                   [TypeAssignment "TypeA" (Value (SequenceType [] [] []))],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType)),Required (WithName "boolB" (Value BooleanType))] [] []))),
+                   [TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType)),Required (WithName "boolB" (Value BooleanType))] [] []))],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN OPTIONAL }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [Optional (WithName "boolA" (Value BooleanType))] [] []))),
+                   [TypeAssignment "TypeA" (Value (SequenceType [Optional (WithName "boolA" (Value BooleanType))] [] []))],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN, ... }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType))] [] []))),
+                   [TypeAssignment "TypeA" (Value (SequenceType [Required (WithName "boolA" (Value BooleanType))] [] []))],
          testParse "TypeA := SEQUENCE { ... , ... , boolA BOOLEAN }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [] [] [Required (WithName "boolA" (Value BooleanType))]))),
+                   [TypeAssignment "TypeA" (Value (SequenceType [] [] [Required (WithName "boolA" (Value BooleanType))]))],
          testParse "TypeA := SEQUENCE { ... , boolA BOOLEAN , ... }"
-                   (TypeAssignment "TypeA" (Value (SequenceType [] [[Required (WithName "boolA" (Value BooleanType))]] []))),
+                   [TypeAssignment "TypeA" (Value (SequenceType [] [[Required (WithName "boolA" (Value BooleanType))]] []))],
          testParse "TypeA := SEQUENCE OF CHOICE { b BOOLEAN , i INTEGER }"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (ChoiceType {choices=[WithName "b" (Value BooleanType), WithName "i" (Value (IntegerType {namedIntegerValues=Nothing}))]})))))),
+                   [TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (ChoiceType {choices=[WithName "b" (Value BooleanType), WithName "i" (Value (IntegerType {namedIntegerValues=Nothing}))]})))))],
          testParse "TypeA := SEQUENCE OF SEQUENCE { b BOOLEAN, ... , ...}"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (SequenceType [Required (WithName "b" (Value BooleanType))] [] [])))))),
+                   [TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (SequenceType [Required (WithName "b" (Value BooleanType))] [] [])))))],
          testParse "TypeA := ENUMERATED { red, green }"
-                   (TypeAssignment "TypeA" (Value (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"]))),
+                   [TypeAssignment "TypeA" (Value (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"]))],
          testParse "TypeA := ENUMERATED { red(1), green, blue(2) }"
-                   (TypeAssignment "TypeA" (Value (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Value 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Value 2))]))),
+                   [TypeAssignment "TypeA" (Value (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Value 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Value 2))]))],
          testParse "TypeA := BIT STRING"
-                   (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Nothing}))),
+                   [TypeAssignment "TypeA" (Value (BitStringType {namedBits = Nothing}))],
          testParse "TypeA := BIT STRING { omit-start(0), omit-end(1) }"
-                   (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Just [WithName "omit-start" (Value 0), WithName "omit-end" (Value 1)]}))),
+                   [TypeAssignment "TypeA" (Value (BitStringType {namedBits = Just [WithName "omit-start" (Value 0), WithName "omit-end" (Value 1)]}))],
          testParse "TypeA := SEQUENCE OF OCTET STRING"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (OctetStringType))))))
+                   [TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (OctetStringType)))))],
+         testParse "TypeA := TypeB TypeB := BOOLEAN"
+                   [TypeAssignment "TypeA" (Reference "TypeB"), TypeAssignment "TypeB" (Value (BooleanType))]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
