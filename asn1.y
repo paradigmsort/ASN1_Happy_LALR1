@@ -25,6 +25,7 @@ import Test.HUnit
     ':'                                 { KeywordToken ":" }
     'BOOLEAN'                           { KeywordToken "BOOLEAN" }
     'CHOICE'                            { KeywordToken "CHOICE" }
+    'ENUMERATED'                        { KeywordToken "ENUMERATED" }
     'INTEGER'                           { KeywordToken "INTEGER" }
     'OF'                                { KeywordToken "OF" }
     'OPTIONAL'                          { KeywordToken "OPTIONAL" }
@@ -44,6 +45,7 @@ NamedType : IDENTIFIER_OR_VALUE_REFERENCE Type { WithName $1 $2 }
 
 BuiltinType : BooleanType { $1 }
             | ChoiceType { $1 }
+            | EnumeratedType { $1 }
             | IntegerType { $1 }
             | SequenceType { $1 }
             | SequenceOfType { $1 }
@@ -72,6 +74,18 @@ NamedNumber : IDENTIFIER_OR_VALUE_REFERENCE '(' SignedNumber ')' { WithName $1 (
 
 SignedNumber : NUMBER { $1 }
              | '-' NUMBER { (-$2) }
+
+EnumeratedType : 'ENUMERATED' '{' Enumerations '}' { EnumeratedType $3 } --TODO fix
+
+Enumerations : RootEnumeration { $1 }
+
+RootEnumeration : Enumeration { $1 }
+
+Enumeration : EnumerationItem { [$1] }
+            | EnumerationItem ',' Enumeration { $1:$3 }
+
+EnumerationItem : IDENTIFIER_OR_VALUE_REFERENCE { UnnumberedEnumerationEntry $1 }
+                | NamedNumber { NumberedEnumerationEntry $1 }
 
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
@@ -149,8 +163,11 @@ data ASN1ValueOrReference a = Value a
                             | Reference String deriving (Show, Eq)
 data ASN1RequiredOrOptional a = Required a
                               | Optional a deriving (Show, Eq)
+data ASN1EnumerationEntry = UnnumberedEnumerationEntry String
+                          | NumberedEnumerationEntry (ASN1WithName (ASN1ValueOrReference Integer)) deriving (Show, Eq)
 data ASN1Type = BooleanType
               | ChoiceType [ASN1WithName (ASN1ValueOrReference ASN1Type)]
+              | EnumeratedType [ASN1EnumerationEntry]
               | IntegerType (Maybe [ASN1WithName (ASN1ValueOrReference Integer)])
               | SequenceType {
                                preExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))],
