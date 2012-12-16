@@ -24,6 +24,7 @@ tokens :-
     \)                              { KeywordToken }
     \-                              { KeywordToken }
     :                               { KeywordToken }
+    BIT                             { KeywordToken }
     BOOLEAN                         { KeywordToken }
     CHOICE                          { KeywordToken }
     ENUMERATED                      { KeywordToken }
@@ -31,6 +32,7 @@ tokens :-
     OF                              { KeywordToken }
     OPTIONAL                        { KeywordToken }
     SEQUENCE                        { KeywordToken }
+    STRING                          { KeywordToken }
     $upper (\- $alpha | $alpha )*   { TypeOrModuleReferenceToken }
     $lower (\- $alpha | $alpha )*   { IdentifierOrValueReferenceToken }
     0      | $nonzero $digit*       { NumberToken . read }

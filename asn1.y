@@ -23,6 +23,7 @@ import Test.HUnit
     ')'                                 { KeywordToken ")" }
     '-'                                 { KeywordToken "-" }
     ':'                                 { KeywordToken ":" }
+    'BIT'                               { KeywordToken "BIT" }
     'BOOLEAN'                           { KeywordToken "BOOLEAN" }
     'CHOICE'                            { KeywordToken "CHOICE" }
     'ENUMERATED'                        { KeywordToken "ENUMERATED" }
@@ -30,6 +31,7 @@ import Test.HUnit
     'OF'                                { KeywordToken "OF" }
     'OPTIONAL'                          { KeywordToken "OPTIONAL" }
     'SEQUENCE'                          { KeywordToken "SEQUENCE" }
+    'STRING'                            { KeywordToken "STRING" }
 %%
 
 TypeAssignment : TYPE_OR_MODULE_REFERENCE ':=' Type { TypeAssignment $1 $3 }
@@ -43,7 +45,8 @@ DefinedType : TYPE_OR_MODULE_REFERENCE { $1 }
 
 NamedType : IDENTIFIER_OR_VALUE_REFERENCE Type { WithName $1 $2 }
 
-BuiltinType : BooleanType { $1 }
+BuiltinType : BitStringType { $1 }
+            | BooleanType { $1 }
             | ChoiceType { $1 }
             | EnumeratedType { $1 }
             | IntegerType { $1 }
@@ -86,6 +89,15 @@ Enumeration : EnumerationItem { [$1] }
 
 EnumerationItem : IDENTIFIER_OR_VALUE_REFERENCE { UnnumberedEnumerationEntry $1 }
                 | NamedNumber { NumberedEnumerationEntry $1 }
+
+BitStringType : 'BIT' 'STRING' { BitStringType Nothing }
+              | 'BIT' 'STRING' '{' NamedBitList '}' { BitStringType (Just $4) }
+
+NamedBitList : NamedBit { [$1] }
+             | NamedBitList ',' NamedBit { $1 ++ [$3] }
+
+NamedBit : IDENTIFIER_OR_VALUE_REFERENCE '(' NUMBER ')' { WithName $1 (Value $3) }
+         | IDENTIFIER_OR_VALUE_REFERENCE '(' DefinedValue ')' { WithName $1 (Reference $3) }
 
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
@@ -165,7 +177,8 @@ data ASN1RequiredOrOptional a = Required a
                               | Optional a deriving (Show, Eq)
 data ASN1EnumerationEntry = UnnumberedEnumerationEntry String
                           | NumberedEnumerationEntry (ASN1WithName (ASN1ValueOrReference Integer)) deriving (Show, Eq)
-data ASN1Type = BooleanType
+data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1ValueOrReference Integer)] }
+              | BooleanType
               | ChoiceType [ASN1WithName (ASN1ValueOrReference ASN1Type)]
               | EnumeratedType [ASN1EnumerationEntry]
               | IntegerType (Maybe [ASN1WithName (ASN1ValueOrReference Integer)])
@@ -210,7 +223,11 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := ENUMERATED { red, green }"
                    (TypeAssignment "TypeA" (Value (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"]))),
          testParse "TypeA := ENUMERATED { red(1), green, blue(2) }"
-                   (TypeAssignment "TypeA" (Value (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Value 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Value 2))])))
+                   (TypeAssignment "TypeA" (Value (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Value 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Value 2))]))),
+         testParse "TypeA := BIT STRING"
+                   (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Nothing}))),
+         testParse "TypeA := BIT STRING { omit-start(0), omit-end(1) }"
+                   (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Just [WithName "omit-start" (Value 0), WithName "omit-end" (Value 1)]})))
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
