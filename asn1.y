@@ -33,6 +33,8 @@ import Test.HUnit
     'OPTIONAL'                          { KeywordToken "OPTIONAL" }
     'SEQUENCE'                          { KeywordToken "SEQUENCE" }
     'STRING'                            { KeywordToken "STRING" }
+    'TRUE'                              { KeywordToken "TRUE" }
+    'FALSE'                             { KeywordToken "FALSE" }
 %%
 
 
@@ -40,8 +42,11 @@ AssignmentList : Assignment { [$1] }
                | AssignmentList Assignment { $1 ++ [$2] }
 
 Assignment : TypeAssignment { $1 }
+           | ValueAssignment { $1 }
 
 TypeAssignment : TYPE_OR_MODULE_REFERENCE ':=' Type { TypeAssignment $1 $3 }
+
+ValueAssignment : IDENTIFIER_OR_VALUE_REFERENCE Type ':=' Value { ValueAssignment $1 $2 $4 }
 
 Type : BuiltinType { Value $1 }
      | ReferencedType { Reference $1 }
@@ -63,7 +68,14 @@ BuiltinType : BitStringType { $1 }
 
 DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 
+Value : BuiltinValue { Value $1 }
+
+BuiltinValue : BooleanValue { $1 }
+
 BooleanType : 'BOOLEAN' { BooleanType }
+
+BooleanValue : 'TRUE' { BooleanValue True }
+             | 'FALSE' { BooleanValue False }
 
 ChoiceType : 'CHOICE' '{' AlternativeTypeLists '}' { ChoiceType { choices = $3 } }
 
@@ -177,7 +189,8 @@ SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
-data ASN1Assignment = TypeAssignment String (ASN1ValueOrReference ASN1Type) deriving (Show, Eq)
+data ASN1Assignment = TypeAssignment { name :: String, asn1Type::ASN1ValueOrReference ASN1Type }
+                    | ValueAssignment { name :: String, asn1Type::ASN1ValueOrReference ASN1Type, asn1Value::ASN1ValueOrReference ASN1Value } deriving (Show, Eq)
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
@@ -199,6 +212,8 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1ValueOrRef
                                postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))]
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1ValueOrReference ASN1Type)) deriving (Show, Eq)
+
+data ASN1Value = BooleanValue Bool deriving (Show, Eq)
 
 testParse :: String -> [ASN1Assignment]  -> IO ()
 testParse input expected = assertEqual input expected (parse (alexScanTokens input))
@@ -242,7 +257,11 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE OF OCTET STRING"
                    [TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (OctetStringType)))))],
          testParse "TypeA := TypeB TypeB := BOOLEAN"
-                   [TypeAssignment "TypeA" (Reference "TypeB"), TypeAssignment "TypeB" (Value (BooleanType))]
+                   [TypeAssignment "TypeA" (Reference "TypeB"), TypeAssignment "TypeB" (Value BooleanType)],
+         testParse "valueA BOOLEAN := TRUE"
+                   [ValueAssignment {name="valueA", asn1Type=Value BooleanType, asn1Value=Value (BooleanValue True)}],
+         testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
+                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", asn1Value=Value (BooleanValue False)}, TypeAssignment {name="TypeA", asn1Type=Value BooleanType}]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests

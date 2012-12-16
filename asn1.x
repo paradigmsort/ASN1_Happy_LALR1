@@ -34,6 +34,8 @@ tokens :-
     OPTIONAL                        { KeywordToken }
     SEQUENCE                        { KeywordToken }
     STRING                          { KeywordToken }
+    TRUE                            { KeywordToken }
+    FALSE                           { KeywordToken }
     $upper (\- $alpha | $alpha )*   { TypeOrModuleReferenceToken }
     $lower (\- $alpha | $alpha )*   { IdentifierOrValueReferenceToken }
     0      | $nonzero $digit*       { NumberToken . read }
