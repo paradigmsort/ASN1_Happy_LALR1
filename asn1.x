@@ -26,6 +26,7 @@ tokens :-
     :                               { KeywordToken }
     BOOLEAN                         { KeywordToken }
     CHOICE                          { KeywordToken }
+    ENUMERATED                      { KeywordToken }
     INTEGER                         { KeywordToken }
     OF                              { KeywordToken }
     OPTIONAL                        { KeywordToken }
