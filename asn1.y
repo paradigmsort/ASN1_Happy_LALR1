@@ -28,6 +28,7 @@ import Test.HUnit
     'CHOICE'                            { KeywordToken "CHOICE" }
     'ENUMERATED'                        { KeywordToken "ENUMERATED" }
     'INTEGER'                           { KeywordToken "INTEGER" }
+    'OCTET'                             { KeywordToken "OCTET" }
     'OF'                                { KeywordToken "OF" }
     'OPTIONAL'                          { KeywordToken "OPTIONAL" }
     'SEQUENCE'                          { KeywordToken "SEQUENCE" }
@@ -50,6 +51,7 @@ BuiltinType : BitStringType { $1 }
             | ChoiceType { $1 }
             | EnumeratedType { $1 }
             | IntegerType { $1 }
+            | OctetStringType { $1 }
             | SequenceType { $1 }
             | SequenceOfType { $1 }
 
@@ -98,6 +100,8 @@ NamedBitList : NamedBit { [$1] }
 
 NamedBit : IDENTIFIER_OR_VALUE_REFERENCE '(' NUMBER ')' { WithName $1 (Value $3) }
          | IDENTIFIER_OR_VALUE_REFERENCE '(' DefinedValue ')' { WithName $1 (Reference $3) }
+
+OctetStringType : 'OCTET' 'STRING' { OctetStringType }
 
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
@@ -182,6 +186,7 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1ValueOrRef
               | ChoiceType { choices :: [ASN1WithName (ASN1ValueOrReference ASN1Type)] }
               | EnumeratedType [ASN1EnumerationEntry]
               | IntegerType { namedIntegerValues :: Maybe [ASN1WithName (ASN1ValueOrReference Integer)] }
+              | OctetStringType
               | SequenceType {
                                preExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))],
                                extensonAdditions :: [[ASN1RequiredOrOptional (ASN1WithName (ASN1ValueOrReference ASN1Type))]],
@@ -227,7 +232,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := BIT STRING"
                    (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Nothing}))),
          testParse "TypeA := BIT STRING { omit-start(0), omit-end(1) }"
-                   (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Just [WithName "omit-start" (Value 0), WithName "omit-end" (Value 1)]})))
+                   (TypeAssignment "TypeA" (Value (BitStringType {namedBits = Just [WithName "omit-start" (Value 0), WithName "omit-end" (Value 1)]}))),
+         testParse "TypeA := SEQUENCE OF OCTET STRING"
+                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (OctetStringType))))))
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests

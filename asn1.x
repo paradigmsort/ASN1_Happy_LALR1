@@ -29,6 +29,7 @@ tokens :-
     CHOICE                          { KeywordToken }
     ENUMERATED                      { KeywordToken }
     INTEGER                         { KeywordToken }
+    OCTET                           { KeywordToken }
     OF                              { KeywordToken }
     OPTIONAL                        { KeywordToken }
     SEQUENCE                        { KeywordToken }
