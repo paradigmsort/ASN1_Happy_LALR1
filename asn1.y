@@ -71,6 +71,7 @@ DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 Value : BuiltinValue { Builtin $1 }
 
 BuiltinValue : BooleanValue { $1 }
+             | ChoiceValue { $1 }
              | IntegerValue { $1 }
 
 BooleanType : 'BOOLEAN' { BooleanType }
@@ -86,6 +87,8 @@ RootAlternativeTypeList : AlternativeTypeList { $1 }
 
 AlternativeTypeList : NamedType { [$1] }
                     | AlternativeTypeList ',' NamedType { $1 ++ [$3] }
+
+ChoiceValue : IDENTIFIER_OR_VALUE_REFERENCE ':' Value { ChoiceValue { chosen = $1, choiceValue = $3 } }
 
 IntegerType : 'INTEGER' { IntegerType { namedIntegerValues = Nothing } }
             | 'INTEGER' '{' NamedNumberList '}' { IntegerType { namedIntegerValues = Just $3 } }
@@ -194,7 +197,7 @@ parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
 data ASN1Assignment = TypeAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type }
-                    | ValueAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type, asn1Value::ASN1BuiltinOrReference ASN1Value } deriving (Show, Eq)
+                    | ValueAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type, assignmentValue::ASN1BuiltinOrReference ASN1Value } deriving (Show, Eq)
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
@@ -217,7 +220,8 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrR
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
 
-data ASN1Value = BooleanValue Bool 
+data ASN1Value = BooleanValue Bool
+               | ChoiceValue { chosen :: String, choiceValue :: ASN1BuiltinOrReference ASN1Value }
                | IntegerValue (ASN1BuiltinOrReference Integer) deriving (Show, Eq)
 
 testParse :: String -> [ASN1Assignment]  -> IO ()
@@ -264,13 +268,15 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := TypeB TypeB := BOOLEAN"
                    [TypeAssignment "TypeA" (Reference "TypeB"), TypeAssignment "TypeB" (Builtin BooleanType)],
          testParse "valueA BOOLEAN := TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, asn1Value=Builtin (BooleanValue True)}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=Builtin (BooleanValue True)}],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", asn1Value=Builtin (BooleanValue False)}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
+                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", assignmentValue=Builtin (BooleanValue False)}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
          testParse "valueA INTEGER := -5"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), asn1Value=Builtin (IntegerValue (Builtin (-5)))}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), assignmentValue=Builtin (IntegerValue (Builtin (-5)))}],
          testParse "valueA INTEGER {five(5)} := two"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), asn1Value=Builtin (IntegerValue (Reference "two"))}]
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=Builtin (IntegerValue (Reference "two"))}],
+         testParse "valueA ChoiceType := choiceA : TRUE"
+                   [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=Builtin (ChoiceValue {chosen="choiceA", choiceValue=Builtin (BooleanValue True)})}]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
