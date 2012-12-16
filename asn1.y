@@ -208,7 +208,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE OF SEQUENCE { b BOOLEAN, ... , ...}"
                    (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (SequenceType [Required (WithName "b" (Value BooleanType))] [] [])))))),
          testParse "TypeA := ENUMERATED { red, green }"
-                   (TypeAssignment "TypeA" (Value (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"])))
+                   (TypeAssignment "TypeA" (Value (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"]))),
+         testParse "TypeA := ENUMERATED { red(1), green, blue(2) }"
+                   (TypeAssignment "TypeA" (Value (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Value 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Value 2))])))
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
