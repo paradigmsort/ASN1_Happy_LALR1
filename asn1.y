@@ -57,7 +57,7 @@ DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 
 BooleanType : 'BOOLEAN' { BooleanType }
 
-ChoiceType : 'CHOICE' '{' AlternativeTypeLists '}' { ChoiceType $3 }
+ChoiceType : 'CHOICE' '{' AlternativeTypeLists '}' { ChoiceType { choices=$3 } }
 
 AlternativeTypeLists : RootAlternativeTypeList { $1 }
 
@@ -179,7 +179,7 @@ data ASN1EnumerationEntry = UnnumberedEnumerationEntry String
                           | NumberedEnumerationEntry (ASN1WithName (ASN1ValueOrReference Integer)) deriving (Show, Eq)
 data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1ValueOrReference Integer)] }
               | BooleanType
-              | ChoiceType [ASN1WithName (ASN1ValueOrReference ASN1Type)]
+              | ChoiceType { choices :: [ASN1WithName (ASN1ValueOrReference ASN1Type)] }
               | EnumeratedType [ASN1EnumerationEntry]
               | IntegerType (Maybe [ASN1WithName (ASN1ValueOrReference Integer)])
               | SequenceType {
@@ -197,7 +197,7 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := TypeB"
                    (TypeAssignment "TypeA" (Reference "TypeB")),
          testParse "TypeA := CHOICE { bool BOOLEAN }"
-                   (TypeAssignment "TypeA" (Value (ChoiceType [WithName "bool" (Value BooleanType)]))),
+                   (TypeAssignment "TypeA" (Value (ChoiceType {choices=[WithName "bool" (Value BooleanType)]}))),
          testParse "TypeA := INTEGER { two(2) }"
                    (TypeAssignment "TypeA" (Value (IntegerType (Just [WithName "two" (Value 2)])))),
          testParse "TypeA := SEQUENCE OF TypeB"
@@ -217,7 +217,7 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE { ... , boolA BOOLEAN , ... }"
                    (TypeAssignment "TypeA" (Value (SequenceType [] [[Required (WithName "boolA" (Value BooleanType))]] []))),
          testParse "TypeA := SEQUENCE OF CHOICE { b BOOLEAN , i INTEGER }"
-                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (ChoiceType [WithName "b" (Value BooleanType), WithName "i" (Value (IntegerType Nothing))])))))),
+                   (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (ChoiceType {choices=[WithName "b" (Value BooleanType), WithName "i" (Value (IntegerType Nothing))]})))))),
          testParse "TypeA := SEQUENCE OF SEQUENCE { b BOOLEAN, ... , ...}"
                    (TypeAssignment "TypeA" (Value (SequenceOfType (Unnamed (Value (SequenceType [Required (WithName "b" (Value BooleanType))] [] [])))))),
          testParse "TypeA := ENUMERATED { red, green }"
