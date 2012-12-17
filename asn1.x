@@ -1,11 +1,14 @@
 {
 module ASN1Lexer where
+import qualified Data.Map
 import Test.HUnit
 }
 
 %wrapper "basic"
 
 $digit = 0-9
+$bindigit = 0-1
+$hexdigit = [0-9A-F]
 $nonzero = 1-9
 $upper = [A-Z]
 $lower = [a-z]
@@ -39,23 +42,44 @@ tokens :-
     $upper (\- $alpha | $alpha )*   { TypeOrModuleReferenceToken }
     $lower (\- $alpha | $alpha )*   { IdentifierOrValueReferenceToken }
     0      | $nonzero $digit*       { NumberToken . read }
-    \'( 0 | 1 | $white )*\'B        { BStringToken . toBString }
+    \'( $bindigit | $white )*\'B    { BStringToken . toBString }
+    \'( $hexdigit | $white )*\'H    { HStringToken . toHString }
 
 {
-data Bit = Zero | One deriving (Show, Eq)
+data Bit = B0 | B1 deriving (Show, Eq)
+data Hex = H0 | H1 | H2 | H3 | H4 | H5 | H6 | H7 | H8 | H9 | HA | HB | HC | HD | HE | HF deriving (Show, Eq)
 data ASN1Token = TypeOrModuleReferenceToken String
                | IdentifierOrValueReferenceToken String
                | NumberToken Integer
                | BStringToken [Bit]
+               | HStringToken [Hex]
                | KeywordToken String deriving (Show, Eq)
 
+toBit :: Char -> Maybe Bit
+toBit = (flip Data.Map.lookup) (Data.Map.fromList [('0', B0), ('1', B1)])
+
+toHex :: Char -> Maybe Hex
+toHex = (flip Data.Map.lookup) (Data.Map.fromList [('0', H0), ('1', H1), ('2', H2), ('3', H3),
+                                                   ('4', H4), ('5', H5), ('6', H6), ('7', H7),
+                                                   ('8', H8), ('9', H9), ('A', HA), ('B', HB),
+                                                   ('C', HC), ('D', HD), ('E', HE), ('F', HF)])
+
+hexesToBits :: [Hex] -> [Bit]
+hexesToBits = concat . map (\x -> case x of H0 -> [B0,B0,B0,B0]; H1 -> [B0,B0,B0,B1]; H2 -> [B0,B0,B1,B0]; H3 -> [B0,B0,B1,B1]
+                                            H4 -> [B0,B1,B0,B0]; H5 -> [B0,B1,B0,B1]; H6 -> [B0,B1,B1,B0]; H7 -> [B0,B1,B1,B1]
+                                            H8 -> [B1,B0,B0,B0]; H9 -> [B1,B0,B0,B1]; HA -> [B1,B0,B1,B0]; HB -> [B1,B0,B1,B1]
+                                            HC -> [B1,B1,B0,B0]; HD -> [B1,B1,B0,B1]; HE -> [B1,B1,B1,B0]; HF -> [B1,B1,B1,B1])
+
+buildList :: (a -> Maybe b) -> [a] -> [b]
+buildList _ [] = []
+buildList f (x:xs) = case f x of Just y -> y:buildList f xs
+                                 Nothing -> buildList f xs 
+
 toBString :: String -> [Bit]
-toBString [] = []
-toBString ('\'':xs) = toBString xs
-toBString ('B':xs) = toBString xs
-toBString ('0':xs) = Zero : toBString xs
-toBString ('1':xs) = One : toBString xs
-toBString (x:xs) = toBString xs
+toBString = buildList toBit
+
+toHString :: String -> [Hex]
+toHString = buildList toHex
 
 testLex :: String -> [ASN1Token] -> IO()
 testLex input expected = assertEqual input expected (alexScanTokens input)
@@ -89,7 +113,9 @@ lexerTests = [testLex "TypeA := BOOLEAN"
               testLex "\'\'B"
                       [BStringToken []],
               testLex "\'0 011\'B"
-                      [BStringToken [Zero, Zero, One, One]]
+                      [BStringToken [B0, B0, B1, B1]],
+              testLex "\'A3\'H"
+                      [HStringToken [HA, H3]]
               ]
 
 }

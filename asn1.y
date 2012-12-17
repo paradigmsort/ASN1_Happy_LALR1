@@ -13,6 +13,7 @@ import Test.HUnit
     IDENTIFIER_OR_VALUE_REFERENCE       { IdentifierOrValueReferenceToken $$ }
     NUMBER                              { NumberToken $$ }
     BSTRING                             { BStringToken $$ }
+    HSTRING                             { HStringToken $$ }
     ':='                                { KeywordToken ":=" }
     '...'                               { KeywordToken "..." }
     '[['                                { KeywordToken "[[" }
@@ -129,6 +130,7 @@ NamedBit : IDENTIFIER_OR_VALUE_REFERENCE '(' NUMBER ')' { WithName $1 (Builtin $
          | IDENTIFIER_OR_VALUE_REFERENCE '(' DefinedValue ')' { WithName $1 (Reference $3) }
 
 BitStringValue : BSTRING { BitStringValue $1 }
+               | HSTRING { BitStringValue (hexesToBits $1) }
 
 OctetStringType : 'OCTET' 'STRING' { OctetStringType }
 
@@ -282,7 +284,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA ChoiceType := choiceA : TRUE"
                    [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=Builtin (ChoiceValue {chosen="choiceA", choiceValue=Builtin (BooleanValue True)})}],
          testParse "valueA BIT STRING := \'0000\'B"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=Builtin (BitStringValue [Zero, Zero, Zero, Zero])}]
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=Builtin (BitStringValue [B0, B0, B0, B0])}],
+         testParse "valueA BIT STRING := \'3\'H"
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=Builtin (BitStringValue [B0, B0, B1, B1])}]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
