@@ -39,12 +39,23 @@ tokens :-
     $upper (\- $alpha | $alpha )*   { TypeOrModuleReferenceToken }
     $lower (\- $alpha | $alpha )*   { IdentifierOrValueReferenceToken }
     0      | $nonzero $digit*       { NumberToken . read }
+    \'( 0 | 1 | $white )*\'B        { BStringToken . toBString }
 
 {
+data Bit = Zero | One deriving (Show, Eq)
 data ASN1Token = TypeOrModuleReferenceToken String
                | IdentifierOrValueReferenceToken String
                | NumberToken Integer
+               | BStringToken [Bit]
                | KeywordToken String deriving (Show, Eq)
+
+toBString :: String -> [Bit]
+toBString [] = []
+toBString ('\'':xs) = toBString xs
+toBString ('B':xs) = toBString xs
+toBString ('0':xs) = Zero : toBString xs
+toBString ('1':xs) = One : toBString xs
+toBString (x:xs) = toBString xs
 
 testLex :: String -> [ASN1Token] -> IO()
 testLex input expected = assertEqual input expected (alexScanTokens input)
@@ -74,7 +85,11 @@ lexerTests = [testLex "TypeA := BOOLEAN"
               testLex "test[[[["
                       [IdentifierOrValueReferenceToken "test", KeywordToken "[[", KeywordToken "[["],
               testLex "[[ 1: bool BOOLEAN ]]"
-                      [KeywordToken "[[", NumberToken 1, KeywordToken ":", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "]]"]
+                      [KeywordToken "[[", NumberToken 1, KeywordToken ":", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "]]"],
+              testLex "\'\'B"
+                      [BStringToken []],
+              testLex "\'0 011\'B"
+                      [BStringToken [Zero, Zero, One, One]]
               ]
 
 }

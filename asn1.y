@@ -12,6 +12,7 @@ import Test.HUnit
     TYPE_OR_MODULE_REFERENCE            { TypeOrModuleReferenceToken $$ }
     IDENTIFIER_OR_VALUE_REFERENCE       { IdentifierOrValueReferenceToken $$ }
     NUMBER                              { NumberToken $$ }
+    BSTRING                             { BStringToken $$ }
     ':='                                { KeywordToken ":=" }
     '...'                               { KeywordToken "..." }
     '[['                                { KeywordToken "[[" }
@@ -70,7 +71,8 @@ DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 
 Value : BuiltinValue { Builtin $1 }
 
-BuiltinValue : BooleanValue { $1 }
+BuiltinValue : BitStringValue { $1 }
+             | BooleanValue { $1 }
              | ChoiceValue { $1 }
              | IntegerValue { $1 }
 
@@ -125,6 +127,8 @@ NamedBitList : NamedBit { [$1] }
 
 NamedBit : IDENTIFIER_OR_VALUE_REFERENCE '(' NUMBER ')' { WithName $1 (Builtin $3) }
          | IDENTIFIER_OR_VALUE_REFERENCE '(' DefinedValue ')' { WithName $1 (Reference $3) }
+
+BitStringValue : BSTRING { BitStringValue $1 }
 
 OctetStringType : 'OCTET' 'STRING' { OctetStringType }
 
@@ -219,8 +223,8 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrR
                                postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1BuiltinOrReference ASN1Type))]
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
-
-data ASN1Value = BooleanValue Bool
+data ASN1Value = BitStringValue [Bit]
+               | BooleanValue Bool
                | ChoiceValue { chosen :: String, choiceValue :: ASN1BuiltinOrReference ASN1Value }
                | IntegerValue (ASN1BuiltinOrReference Integer) deriving (Show, Eq)
 
@@ -276,7 +280,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA INTEGER {five(5)} := two"
                    [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=Builtin (IntegerValue (Reference "two"))}],
          testParse "valueA ChoiceType := choiceA : TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=Builtin (ChoiceValue {chosen="choiceA", choiceValue=Builtin (BooleanValue True)})}]
+                   [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=Builtin (ChoiceValue {chosen="choiceA", choiceValue=Builtin (BooleanValue True)})}],
+         testParse "valueA BIT STRING := \'0000\'B"
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=Builtin (BitStringValue [Zero, Zero, Zero, Zero])}]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
