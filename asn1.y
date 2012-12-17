@@ -76,6 +76,7 @@ BuiltinValue : BitStringValue { $1 }
              | BooleanValue { $1 }
              | ChoiceValue { $1 }
              | IntegerValue { $1 }
+--           | OctetStringValue { $1 } reduce/reduce conflicts with BitStringValue
 
 BooleanType : 'BOOLEAN' { BooleanType }
 
@@ -133,6 +134,9 @@ BitStringValue : BSTRING { BitStringValue $1 }
                | HSTRING { BitStringValue (hexesToBits $1) }
 
 OctetStringType : 'OCTET' 'STRING' { OctetStringType }
+
+OctetStringValue : BSTRING { OctetStringValue (bitsToOctets $1) }
+                 | HSTRING { OctetStringValue ((bitsToOctets . hexesToBits) $1) }
 
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
@@ -225,10 +229,20 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrR
                                postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1BuiltinOrReference ASN1Type))]
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
+type Octet = (Bit,Bit,Bit,Bit,Bit,Bit,Bit,Bit)
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
                | ChoiceValue { chosen :: String, choiceValue :: ASN1BuiltinOrReference ASN1Value }
-               | IntegerValue (ASN1BuiltinOrReference Integer) deriving (Show, Eq)
+               | IntegerValue (ASN1BuiltinOrReference Integer)
+               | OctetStringValue [Octet] deriving (Show, Eq)
+ 
+makeOctet :: [Bit] -> Octet
+makeOctet (a:b:c:d:e:f:g:h:[]) = (a,b,c,d,e,f,g,h)
+
+bitsToOctets :: [Bit] -> [Octet]
+bitsToOctets bits = let (eight, rest) = splitAt 8 bits in
+                    case rest of [] -> [makeOctet (take 8 (bits ++ (repeat B0)))]
+                                 otherwise -> makeOctet eight : bitsToOctets rest
 
 testParse :: String -> [ASN1Assignment]  -> IO ()
 testParse input expected = assertEqual input expected (parse (alexScanTokens input))
