@@ -331,7 +331,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA BIT STRING := \'0000\'B"
                    [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[BStringToken [B0,B0,B0,B0]]}],
          testParse "valueA BIT STRING := \'3\'H"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[HStringToken [H3]]}]
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[HStringToken [H3]]}],
+         testParse "TypeA := TypeC TypeB := OCTET STRING TypeC := TypeB"
+                   [TypeAssignment "TypeA" (Builtin OctetStringType), TypeAssignment "TypeB" (Builtin OctetStringType), TypeAssignment "TypeC" (Builtin OctetStringType)]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
