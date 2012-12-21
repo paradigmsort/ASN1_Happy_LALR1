@@ -259,13 +259,31 @@ bitsToOctets bits = let (eight, rest) = splitAt 8 bits in
                     case rest of [] -> [makeOctet (take 8 (bits ++ (repeat B0)))]
                                  otherwise -> makeOctet eight : bitsToOctets rest
 
+findTypeByName :: [ASN1Assignment] -> String -> ASN1BuiltinOrReference ASN1Type
+findTypeByName [] n = error ("could not resolve reference to type " ++ n)
+findTypeByName ((TypeAssignment cn t):xs) n = if n == cn then t else findTypeByName xs n
+findTypeByName ((ValueAssignment _ _ _):xs) n = findTypeByName xs n
+
+resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type
+resolveTypeReference xs (Builtin b) = Builtin b
+resolveTypeReference xs (Reference r) = ((resolveTypeReference xs) . (findTypeByName xs)) r
+
+resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1Assignment
+resolveTypesInAssignment as (TypeAssignment n t) = case t of Reference _ -> resolveTypesInAssignment as (TypeAssignment n (resolveTypeReference as t))
+                                                             otherwise -> TypeAssignment n t
+resolveTypesInAssignment as (ValueAssignment n t v) = case t of Reference _ -> resolveTypesInAssignment as (ValueAssignment n (resolveTypeReference as t) v)
+                                                                otherwise -> ValueAssignment n t v
+
+resolveTypes :: [ASN1Assignment] -> [ASN1Assignment]
+resolveTypes x = map (resolveTypesInAssignment x) x
+
 testParse :: String -> [ASN1Assignment]  -> IO ()
-testParse input expected = assertEqual input expected (parse (alexScanTokens input))
+testParse input expected = assertEqual input expected ((resolveTypes . parse . alexScanTokens) input)
 
 tests = [testParse "TypeA := BOOLEAN"
                    [TypeAssignment "TypeA" (Builtin BooleanType)],
-         testParse "TypeA := TypeB"
-                   [TypeAssignment "TypeA" (Reference "TypeB")],
+         testParse "TypeA := TypeB TypeB := BOOLEAN"
+                   [TypeAssignment "TypeA" (Builtin BooleanType), TypeAssignment "TypeB" (Builtin BooleanType)],
          testParse "TypeA := CHOICE { bool BOOLEAN }"
                    [TypeAssignment "TypeA" (Builtin (ChoiceType {choices=[WithName "bool" (Builtin BooleanType)]}))],
          testParse "TypeA := INTEGER { two(2) }"
@@ -300,18 +318,16 @@ tests = [testParse "TypeA := BOOLEAN"
                    [TypeAssignment "TypeA" (Builtin (BitStringType {namedBits = Just [WithName "omit-start" (Builtin 0), WithName "omit-end" (Builtin 1)]}))],
          testParse "TypeA := SEQUENCE OF OCTET STRING"
                    [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Builtin (OctetStringType)))))],
-         testParse "TypeA := TypeB TypeB := BOOLEAN"
-                   [TypeAssignment "TypeA" (Reference "TypeB"), TypeAssignment "TypeB" (Builtin BooleanType)],
          testParse "valueA BOOLEAN := TRUE"
                    [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=[KeywordToken "TRUE"]}],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", assignmentValue=[KeywordToken "FALSE"]}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=[KeywordToken "FALSE"]}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
          testParse "valueA INTEGER := -5"
                    [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), assignmentValue=[KeywordToken "-", NumberToken 5]}],
          testParse "valueA INTEGER {five(5)} := two"
                    [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=[IdentifierOrValueReferenceToken "two"]}],
-         testParse "valueA ChoiceType := choiceA : TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=[IdentifierOrValueReferenceToken "choiceA", KeywordToken ":", KeywordToken "TRUE"]}],
+         testParse "valueA CHOICE {choiceA BOOLEAN } := choiceA : TRUE"
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (ChoiceType {choices=[WithName "choiceA" (Builtin BooleanType)]}), assignmentValue=[IdentifierOrValueReferenceToken "choiceA", KeywordToken ":", KeywordToken "TRUE"]}],
          testParse "valueA BIT STRING := \'0000\'B"
                    [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[BStringToken [B0,B0,B0,B0]]}],
          testParse "valueA BIT STRING := \'3\'H"
