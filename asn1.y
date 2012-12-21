@@ -4,7 +4,12 @@ import ASN1Lexer
 import Test.HUnit
 }
 
-%name parse
+%name parse AssignmentList
+%name parseBitStringValue BitStringValue
+%name parseBooleanValue BooleanValue
+%name parseChoiceValue ChoiceValue
+%name parseIntegerValue IntegerValue
+%name parseOctetStringValue OctetStringValue
 %tokentype { ASN1Token }
 %error { parseError }
 
@@ -70,13 +75,16 @@ BuiltinType : BitStringType { $1 }
 
 DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 
-Value : BuiltinValue { Builtin $1 }
+Value : BuiltinValue { $1 }
 
-BuiltinValue : BitStringValue { $1 }
-             | BooleanValue { $1 }
-             | ChoiceValue { $1 }
-             | IntegerValue { $1 }
---           | OctetStringValue { $1 } reduce/reduce conflicts with BitStringValue
+BuiltinValue : BSTRING { [BStringToken $1] } --BitStringValue, OctetStringValue
+             | HSTRING { [HStringToken $1] }
+             | 'TRUE' { [KeywordToken "TRUE"] } --BooleanValue
+             | 'FALSE' { [KeywordToken "FALSE"] }
+             | IDENTIFIER_OR_VALUE_REFERENCE ':' Value { [IdentifierOrValueReferenceToken $1, KeywordToken ":"] ++ $3 } --ChoiceValue
+             | NUMBER { [NumberToken $1] } --IntegerValue
+             | '-' NUMBER { [KeywordToken "-", NumberToken $2] }
+             | IDENTIFIER_OR_VALUE_REFERENCE { [IdentifierOrValueReferenceToken $1] }
 
 BooleanType : 'BOOLEAN' { BooleanType }
 
@@ -207,7 +215,7 @@ parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
 data ASN1Assignment = TypeAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type }
-                    | ValueAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type, assignmentValue::ASN1BuiltinOrReference ASN1Value } deriving (Show, Eq)
+                    | ValueAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type, assignmentValue::[ASN1Token] } deriving (Show, Eq)
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
@@ -232,10 +240,17 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrR
 type Octet = (Bit,Bit,Bit,Bit,Bit,Bit,Bit,Bit)
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
-               | ChoiceValue { chosen :: String, choiceValue :: ASN1BuiltinOrReference ASN1Value }
+               | ChoiceValue { chosen :: String, choiceValue :: [ASN1Token] }
                | IntegerValue (ASN1BuiltinOrReference Integer)
                | OctetStringValue [Octet] deriving (Show, Eq)
  
+parseValue :: ASN1Type -> [ASN1Token] -> ASN1Value
+parseValue t = case t of BitStringType x -> parseBitStringValue
+                         BooleanType -> parseBooleanValue
+                         ChoiceType x -> parseChoiceValue
+                         IntegerType x -> parseIntegerValue
+                         OctetStringType -> parseOctetStringValue
+
 makeOctet :: [Bit] -> Octet
 makeOctet (a:b:c:d:e:f:g:h:[]) = (a,b,c,d,e,f,g,h)
 
@@ -288,19 +303,19 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := TypeB TypeB := BOOLEAN"
                    [TypeAssignment "TypeA" (Reference "TypeB"), TypeAssignment "TypeB" (Builtin BooleanType)],
          testParse "valueA BOOLEAN := TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=Builtin (BooleanValue True)}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=[KeywordToken "TRUE"]}],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", assignmentValue=Builtin (BooleanValue False)}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
+                   [ValueAssignment {name="valueA", asn1Type=Reference "TypeA", assignmentValue=[KeywordToken "FALSE"]}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
          testParse "valueA INTEGER := -5"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), assignmentValue=Builtin (IntegerValue (Builtin (-5)))}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), assignmentValue=[KeywordToken "-", NumberToken 5]}],
          testParse "valueA INTEGER {five(5)} := two"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=Builtin (IntegerValue (Reference "two"))}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=[IdentifierOrValueReferenceToken "two"]}],
          testParse "valueA ChoiceType := choiceA : TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=Builtin (ChoiceValue {chosen="choiceA", choiceValue=Builtin (BooleanValue True)})}],
+                   [ValueAssignment {name="valueA", asn1Type=Reference "ChoiceType", assignmentValue=[IdentifierOrValueReferenceToken "choiceA", KeywordToken ":", KeywordToken "TRUE"]}],
          testParse "valueA BIT STRING := \'0000\'B"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=Builtin (BitStringValue [B0, B0, B0, B0])}],
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[BStringToken [B0,B0,B0,B0]]}],
          testParse "valueA BIT STRING := \'3\'H"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=Builtin (BitStringValue [B0, B0, B1, B1])}]
+                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[HStringToken [H3]]}]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
