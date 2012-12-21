@@ -275,17 +275,17 @@ findTypeByName [] n = error ("could not resolve reference to type " ++ n)
 findTypeByName ((TypeAssignment cn t):xs) n = if n == cn then t else findTypeByName xs n
 findTypeByName ((ValueAssignment _ _ _):xs) n = findTypeByName xs n
 
-resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type
-resolveTypeReference as (Builtin b) = Builtin b
+resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1Type
+resolveTypeReference as (Builtin b) = b
 resolveTypeReference as (Reference r) = ((resolveTypeReference as) . (findTypeByName as)) r
 
-resolveTypeComponents :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type-> ASN1BuiltinOrReference ASN1Type
-resolveTypeComponents as t = case t of Builtin (ChoiceType choices) -> Builtin (ChoiceType (map (fmap (resolveTypeCompletely as)) choices))
-                                       Builtin (SequenceType pre ext post) -> Builtin (SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
-                                                                                                    (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
-                                                                                                    (map (fmap (fmap (resolveTypeCompletely as))) post))
-                                       Builtin (SequenceOfType t) -> Builtin (SequenceOfType (fmap (resolveTypeCompletely as) t))
-                                       otherwise -> t
+resolveTypeComponents :: [ASN1Assignment] -> ASN1Type-> ASN1BuiltinOrReference ASN1Type
+resolveTypeComponents as t = case t of (ChoiceType choices) -> Builtin (ChoiceType (map (fmap (resolveTypeCompletely as)) choices))
+                                       (SequenceType pre ext post) -> Builtin (SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
+                                                                                            (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
+                                                                                            (map (fmap (fmap (resolveTypeCompletely as))) post))
+                                       (SequenceOfType t) -> Builtin (SequenceOfType (fmap (resolveTypeCompletely as) t))
+                                       otherwise -> Builtin t
 
 resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type-> ASN1BuiltinOrReference ASN1Type
 resolveTypeCompletely as = (resolveTypeComponents as) . (resolveTypeReference as)
