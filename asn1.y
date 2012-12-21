@@ -279,15 +279,15 @@ resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> A
 resolveTypeReference as (Builtin b) = b
 resolveTypeReference as (Reference r) = ((resolveTypeReference as) . (findTypeByName as)) r
 
-resolveTypeComponents :: [ASN1Assignment] -> ASN1Type-> ASN1BuiltinOrReference ASN1Type
-resolveTypeComponents as t = case t of (ChoiceType choices) -> Builtin (ChoiceType (map (fmap (resolveTypeCompletely as)) choices))
-                                       (SequenceType pre ext post) -> Builtin (SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
+resolveTypeComponents :: [ASN1Assignment] -> ASN1Type -> ASN1BuiltinOrReference ASN1Type
+resolveTypeComponents as t = case t of ChoiceType choices -> Builtin (ChoiceType (map (fmap (resolveTypeCompletely as)) choices))
+                                       SequenceType pre ext post -> Builtin (SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
                                                                                             (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
                                                                                             (map (fmap (fmap (resolveTypeCompletely as))) post))
-                                       (SequenceOfType t) -> Builtin (SequenceOfType (fmap (resolveTypeCompletely as) t))
+                                       SequenceOfType stype -> Builtin (SequenceOfType (fmap (resolveTypeCompletely as) stype))
                                        otherwise -> Builtin t
 
-resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type-> ASN1BuiltinOrReference ASN1Type
+resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type
 resolveTypeCompletely as = (resolveTypeComponents as) . (resolveTypeReference as)
 
 resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1Assignment
