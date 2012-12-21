@@ -237,6 +237,22 @@ data ASN1Type = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrR
                                postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName (ASN1BuiltinOrReference ASN1Type))]
                              }
               | SequenceOfType (ASN1OptionallyNamed (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
+
+data ASN1FinalAssignment = FinalTypeAssignment { finalName :: String, finalAsn1Type :: ASN1FinalType }
+                         | FinalValueAssignment { finalName :: String, finalAsn1Type :: ASN1FinalType, finalAssignmentValue :: [ASN1Token] } deriving (Show, Eq)
+data ASN1FinalType = FinalBitStringType { finalNamedBits :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)]}
+                   | FinalBooleanType
+                   | FinalChoiceType { finalChoices :: [ASN1WithName ASN1FinalType] }
+                   | FinalEnumeratedType [ASN1EnumerationEntry]
+                   | FinalIntegerType { finalNamedIntegerValues :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)]}
+                   | FinalOctetStringType
+                   | FinalSequenceType {
+                                         finalPreExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName ASN1FinalType)],
+                                         finalExtensionAdditions :: [[ASN1RequiredOrOptional (ASN1WithName ASN1FinalType)]],
+                                         finalPostExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName ASN1FinalType)]
+                                       }
+                   | FinalSequenceOfType (ASN1OptionallyNamed ASN1FinalType) deriving (Show, Eq)
+
 type Octet = (Bit,Bit,Bit,Bit,Bit,Bit,Bit,Bit)
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
@@ -279,86 +295,90 @@ resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> A
 resolveTypeReference as (Builtin b) = b
 resolveTypeReference as (Reference r) = ((resolveTypeReference as) . (findTypeByName as)) r
 
-resolveTypeComponents :: [ASN1Assignment] -> ASN1Type -> ASN1BuiltinOrReference ASN1Type
-resolveTypeComponents as t = case t of ChoiceType choices -> Builtin (ChoiceType (map (fmap (resolveTypeCompletely as)) choices))
-                                       SequenceType pre ext post -> Builtin (SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
+resolveTypeComponents :: [ASN1Assignment] -> ASN1Type -> ASN1FinalType
+resolveTypeComponents as t = case t of BitStringType namedBits -> FinalBitStringType namedBits
+                                       BooleanType -> FinalBooleanType
+                                       ChoiceType choices -> FinalChoiceType (map (fmap (resolveTypeCompletely as)) choices)
+                                       EnumeratedType entries -> FinalEnumeratedType entries
+                                       IntegerType namedIntegerValues -> FinalIntegerType namedIntegerValues
+                                       OctetStringType -> FinalOctetStringType
+                                       SequenceType pre ext post -> FinalSequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
                                                                                             (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
-                                                                                            (map (fmap (fmap (resolveTypeCompletely as))) post))
-                                       SequenceOfType stype -> Builtin (SequenceOfType (fmap (resolveTypeCompletely as) stype))
-                                       otherwise -> Builtin t
+                                                                                            (map (fmap (fmap (resolveTypeCompletely as))) post)
+                                       SequenceOfType stype -> FinalSequenceOfType (fmap (resolveTypeCompletely as) stype)
 
-resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type
+resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1FinalType
 resolveTypeCompletely as = (resolveTypeComponents as) . (resolveTypeReference as)
 
-resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1Assignment
+resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1FinalAssignment
 resolveTypesInAssignment as = mapTypeInAssignment (resolveTypeCompletely as)
 
-mapTypeInAssignment :: (ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type) -> ASN1Assignment -> ASN1Assignment
-mapTypeInAssignment f (TypeAssignment n t) = TypeAssignment n (f t)
-mapTypeInAssignment f (ValueAssignment n t v) = ValueAssignment n (f t) v
+mapTypeInAssignment :: (ASN1BuiltinOrReference ASN1Type -> ASN1FinalType) -> ASN1Assignment -> ASN1FinalAssignment
+mapTypeInAssignment f (TypeAssignment n t) = FinalTypeAssignment n (f t)
+mapTypeInAssignment f (ValueAssignment n t v) = FinalValueAssignment n (f t) v
 
-resolveTypes :: [ASN1Assignment] -> [ASN1Assignment]
+resolveTypes :: [ASN1Assignment] -> [ASN1FinalAssignment]
 resolveTypes x = map (resolveTypesInAssignment x) x
 
-testParse :: String -> [ASN1Assignment]  -> IO ()
+testParse :: String -> [ASN1FinalAssignment] -> IO ()
 testParse input expected = assertEqual input expected ((resolveTypes . parse . alexScanTokens) input)
 
 tests = [testParse "TypeA := BOOLEAN"
-                   [TypeAssignment "TypeA" (Builtin BooleanType)],
+                   [FinalTypeAssignment "TypeA" FinalBooleanType],
          testParse "TypeA := TypeB TypeB := BOOLEAN"
-                   [TypeAssignment "TypeA" (Builtin BooleanType), TypeAssignment "TypeB" (Builtin BooleanType)],
+                   [FinalTypeAssignment "TypeA" FinalBooleanType, FinalTypeAssignment "TypeB" FinalBooleanType],
          testParse "TypeA := CHOICE { bool BOOLEAN }"
-                   [TypeAssignment "TypeA" (Builtin (ChoiceType {choices=[WithName "bool" (Builtin BooleanType)]}))],
+                   [FinalTypeAssignment "TypeA" (FinalChoiceType {finalChoices=[WithName "bool" FinalBooleanType]})],
          testParse "TypeA := INTEGER { two(2) }"
-                   [TypeAssignment "TypeA" (Builtin (IntegerType {namedIntegerValues=Just [WithName "two" (Builtin 2)]}))],
+                   [FinalTypeAssignment "TypeA" (FinalIntegerType {finalNamedIntegerValues=Just [WithName "two" (Builtin 2)]})],
          testParse "TypeA := SEQUENCE OF TypeB TypeB := BOOLEAN"
-                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Builtin BooleanType)))), TypeAssignment "TypeB" (Builtin BooleanType)],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceOfType (Unnamed FinalBooleanType)), FinalTypeAssignment "TypeB" FinalBooleanType],
          testParse "TypeA := SEQUENCE OF bool BOOLEAN"
-                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Named (WithName "bool" (Builtin BooleanType)))))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceOfType (Named (WithName "bool" FinalBooleanType)))],
          testParse "TypeA := SEQUENCE { }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceType [] [] []))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceType [] [] [])],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceType [Required (WithName "boolA" (Builtin BooleanType)),Required (WithName "boolB" (Builtin BooleanType))] [] []))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceType [Required (WithName "boolA" FinalBooleanType),Required (WithName "boolB" FinalBooleanType)] [] [])],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN OPTIONAL }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceType [Optional (WithName "boolA" (Builtin BooleanType))] [] []))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceType [Optional (WithName "boolA" FinalBooleanType)] [] [])],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN, ... }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceType [Required (WithName "boolA" (Builtin BooleanType))] [] []))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceType [Required (WithName "boolA" FinalBooleanType)] [] [])],
          testParse "TypeA := SEQUENCE { ... , ... , boolA BOOLEAN }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceType [] [] [Required (WithName "boolA" (Builtin BooleanType))]))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceType [] [] [Required (WithName "boolA" FinalBooleanType)])],
          testParse "TypeA := SEQUENCE { ... , boolA BOOLEAN , ... }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceType [] [[Required (WithName "boolA" (Builtin BooleanType))]] []))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceType [] [[Required (WithName "boolA" FinalBooleanType)]] [])],
          testParse "TypeA := SEQUENCE OF CHOICE { b BOOLEAN , i INTEGER }"
-                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Builtin (ChoiceType {choices=[WithName "b" (Builtin BooleanType), WithName "i" (Builtin (IntegerType {namedIntegerValues=Nothing}))]})))))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceOfType (Unnamed (FinalChoiceType {finalChoices=[WithName "b" FinalBooleanType, WithName "i" (FinalIntegerType {finalNamedIntegerValues=Nothing})]})))],
          testParse "TypeA := SEQUENCE OF SEQUENCE { b BOOLEAN, ... , ...}"
-                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Builtin (SequenceType [Required (WithName "b" (Builtin BooleanType))] [] [])))))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceOfType (Unnamed (FinalSequenceType [Required (WithName "b" FinalBooleanType)] [] [])))],
          testParse "TypeA := ENUMERATED { red, green }"
-                   [TypeAssignment "TypeA" (Builtin (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"]))],
+                   [FinalTypeAssignment "TypeA" (FinalEnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"])],
          testParse "TypeA := ENUMERATED { red(1), green, blue(2) }"
-                   [TypeAssignment "TypeA" (Builtin (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Builtin 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Builtin 2))]))],
+                   [FinalTypeAssignment "TypeA" (FinalEnumeratedType [NumberedEnumerationEntry (WithName "red" (Builtin 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Builtin 2))])],
          testParse "TypeA := BIT STRING"
-                   [TypeAssignment "TypeA" (Builtin (BitStringType {namedBits = Nothing}))],
+                   [FinalTypeAssignment "TypeA" (FinalBitStringType {finalNamedBits = Nothing})],
          testParse "TypeA := BIT STRING { omit-start(0), omit-end(1) }"
-                   [TypeAssignment "TypeA" (Builtin (BitStringType {namedBits = Just [WithName "omit-start" (Builtin 0), WithName "omit-end" (Builtin 1)]}))],
+                   [FinalTypeAssignment "TypeA" (FinalBitStringType {finalNamedBits = Just [WithName "omit-start" (Builtin 0), WithName "omit-end" (Builtin 1)]})],
          testParse "TypeA := SEQUENCE OF OCTET STRING"
-                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Builtin (OctetStringType)))))],
+                   [FinalTypeAssignment "TypeA" (FinalSequenceOfType (Unnamed (FinalOctetStringType)))],
          testParse "valueA BOOLEAN := TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=[KeywordToken "TRUE"]}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=FinalBooleanType, finalAssignmentValue=[KeywordToken "TRUE"]}],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin BooleanType, assignmentValue=[KeywordToken "FALSE"]}, TypeAssignment {name="TypeA", asn1Type=Builtin BooleanType}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=FinalBooleanType, finalAssignmentValue=[KeywordToken "FALSE"]}, FinalTypeAssignment {finalName="TypeA", finalAsn1Type=FinalBooleanType}],
          testParse "valueA INTEGER := -5"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues=Nothing}), assignmentValue=[KeywordToken "-", NumberToken 5]}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=(FinalIntegerType {finalNamedIntegerValues=Nothing}), finalAssignmentValue=[KeywordToken "-", NumberToken 5]}],
          testParse "valueA INTEGER {five(5)} := two"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=[IdentifierOrValueReferenceToken "two"]}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=(FinalIntegerType {finalNamedIntegerValues= Just [WithName "five" (Builtin 5)]}), finalAssignmentValue=[IdentifierOrValueReferenceToken "two"]}],
          testParse "valueA CHOICE {choiceA BOOLEAN } := choiceA : TRUE"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (ChoiceType {choices=[WithName "choiceA" (Builtin BooleanType)]}), assignmentValue=[IdentifierOrValueReferenceToken "choiceA", KeywordToken ":", KeywordToken "TRUE"]}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=(FinalChoiceType {finalChoices=[WithName "choiceA" FinalBooleanType]}), finalAssignmentValue=[IdentifierOrValueReferenceToken "choiceA", KeywordToken ":", KeywordToken "TRUE"]}],
          testParse "valueA BIT STRING := \'0000\'B"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[BStringToken [B0,B0,B0,B0]]}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=(FinalBitStringType {finalNamedBits=Nothing}), finalAssignmentValue=[BStringToken [B0,B0,B0,B0]]}],
          testParse "valueA BIT STRING := \'3\'H"
-                   [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[HStringToken [H3]]}],
+                   [FinalValueAssignment {finalName="valueA", finalAsn1Type=(FinalBitStringType {finalNamedBits=Nothing}), finalAssignmentValue=[HStringToken [H3]]}],
          testParse "TypeA := TypeC TypeB := OCTET STRING TypeC := TypeB"
-                   [TypeAssignment "TypeA" (Builtin OctetStringType), TypeAssignment "TypeB" (Builtin OctetStringType), TypeAssignment "TypeC" (Builtin OctetStringType)],
+                   [FinalTypeAssignment "TypeA" FinalOctetStringType, FinalTypeAssignment "TypeB" FinalOctetStringType, FinalTypeAssignment "TypeC" FinalOctetStringType],
          testParse "TypeA := CHOICE { c TypeB } TypeB := CHOICE { c TypeC } TypeC := BOOLEAN"
-                   [TypeAssignment "TypeA" (Builtin (ChoiceType {choices=[WithName "c" (Builtin (ChoiceType {choices=[WithName "c" (Builtin BooleanType)]}))]})), TypeAssignment "TypeB" (Builtin (ChoiceType {choices=[WithName "c" (Builtin BooleanType)]})), TypeAssignment "TypeC" (Builtin BooleanType)]
+                   [FinalTypeAssignment "TypeA" (FinalChoiceType {finalChoices=[WithName "c" (FinalChoiceType {finalChoices=[WithName "c" FinalBooleanType]})]}), FinalTypeAssignment "TypeB" (FinalChoiceType {finalChoices=[WithName "c" FinalBooleanType]}), FinalTypeAssignment "TypeC" FinalBooleanType]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
