@@ -272,10 +272,10 @@ instance Functor ASN1RequiredOrOptional where
   fmap f (Optional a) = Optional (f a)
 
 parseValue :: ASN1Type -> [ASN1Token] -> ASN1Value
-parseValue t = case t of BitStringType x -> parseBitStringValue
+parseValue t = case t of BitStringType _ -> parseBitStringValue
                          BooleanType -> parseBooleanValue
-                         ChoiceType x -> parseChoiceValue
-                         IntegerType x -> parseIntegerValue
+                         ChoiceType _ -> parseChoiceValue
+                         IntegerType _ -> parseIntegerValue
                          OctetStringType -> parseOctetStringValue
 
 makeOctet :: [Bit] -> Octet
