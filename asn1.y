@@ -269,10 +269,8 @@ resolveTypeReference xs (Builtin b) = Builtin b
 resolveTypeReference xs (Reference r) = ((resolveTypeReference xs) . (findTypeByName xs)) r
 
 resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1Assignment
-resolveTypesInAssignment as (TypeAssignment n t) = case t of Reference _ -> resolveTypesInAssignment as (TypeAssignment n (resolveTypeReference as t))
-                                                             otherwise -> TypeAssignment n t
-resolveTypesInAssignment as (ValueAssignment n t v) = case t of Reference _ -> resolveTypesInAssignment as (ValueAssignment n (resolveTypeReference as t) v)
-                                                                otherwise -> ValueAssignment n t v
+resolveTypesInAssignment as (TypeAssignment n t) = TypeAssignment n (resolveTypeReference as t)
+resolveTypesInAssignment as (ValueAssignment n t v) = ValueAssignment n (resolveTypeReference as t) v
 
 resolveTypes :: [ASN1Assignment] -> [ASN1Assignment]
 resolveTypes x = map (resolveTypesInAssignment x) x
