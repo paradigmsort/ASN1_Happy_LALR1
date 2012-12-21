@@ -243,7 +243,18 @@ data ASN1Value = BitStringValue [Bit]
                | ChoiceValue { chosen :: String, choiceValue :: [ASN1Token] }
                | IntegerValue (ASN1BuiltinOrReference Integer)
                | OctetStringValue [Octet] deriving (Show, Eq)
- 
+
+instance Functor ASN1WithName where
+  fmap f (WithName n x) = WithName n (f x)
+
+instance Functor ASN1OptionallyNamed where
+  fmap f (Unnamed x) = Unnamed (f x)
+  fmap f (Named x) = Named (fmap f x)
+
+instance Functor ASN1RequiredOrOptional where
+  fmap f (Required a) = Required (f a)
+  fmap f (Optional a) = Optional (f a)
+
 parseValue :: ASN1Type -> [ASN1Token] -> ASN1Value
 parseValue t = case t of BitStringType x -> parseBitStringValue
                          BooleanType -> parseBooleanValue
@@ -265,11 +276,22 @@ findTypeByName ((TypeAssignment cn t):xs) n = if n == cn then t else findTypeByN
 findTypeByName ((ValueAssignment _ _ _):xs) n = findTypeByName xs n
 
 resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type
-resolveTypeReference xs (Builtin b) = Builtin b
-resolveTypeReference xs (Reference r) = ((resolveTypeReference xs) . (findTypeByName xs)) r
+resolveTypeReference as (Builtin b) = Builtin b
+resolveTypeReference as (Reference r) = ((resolveTypeReference as) . (findTypeByName as)) r
+
+resolveTypeComponents :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type-> ASN1BuiltinOrReference ASN1Type
+resolveTypeComponents as t = case t of Builtin (ChoiceType choices) -> Builtin (ChoiceType (map (fmap (resolveTypeCompletely as)) choices))
+                                       Builtin (SequenceType pre ext post) -> Builtin (SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
+                                                                                                    (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
+                                                                                                    (map (fmap (fmap (resolveTypeCompletely as))) post))
+                                       Builtin (SequenceOfType t) -> Builtin (SequenceOfType (fmap (resolveTypeCompletely as) t))
+                                       otherwise -> t
+
+resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type-> ASN1BuiltinOrReference ASN1Type
+resolveTypeCompletely as = (resolveTypeComponents as) . (resolveTypeReference as)
 
 resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1Assignment
-resolveTypesInAssignment as = mapTypeInAssignment (resolveTypeReference as)
+resolveTypesInAssignment as = mapTypeInAssignment (resolveTypeCompletely as)
 
 mapTypeInAssignment :: (ASN1BuiltinOrReference ASN1Type -> ASN1BuiltinOrReference ASN1Type) -> ASN1Assignment -> ASN1Assignment
 mapTypeInAssignment f (TypeAssignment n t) = TypeAssignment n (f t)
@@ -289,8 +311,8 @@ tests = [testParse "TypeA := BOOLEAN"
                    [TypeAssignment "TypeA" (Builtin (ChoiceType {choices=[WithName "bool" (Builtin BooleanType)]}))],
          testParse "TypeA := INTEGER { two(2) }"
                    [TypeAssignment "TypeA" (Builtin (IntegerType {namedIntegerValues=Just [WithName "two" (Builtin 2)]}))],
-         testParse "TypeA := SEQUENCE OF TypeB"
-                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Reference "TypeB"))))],
+         testParse "TypeA := SEQUENCE OF TypeB TypeB := BOOLEAN"
+                   [TypeAssignment "TypeA" (Builtin (SequenceOfType (Unnamed (Builtin BooleanType)))), TypeAssignment "TypeB" (Builtin BooleanType)],
          testParse "TypeA := SEQUENCE OF bool BOOLEAN"
                    [TypeAssignment "TypeA" (Builtin (SequenceOfType (Named (WithName "bool" (Builtin BooleanType)))))],
          testParse "TypeA := SEQUENCE { }"
@@ -334,7 +356,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA BIT STRING := \'3\'H"
                    [ValueAssignment {name="valueA", asn1Type=Builtin (BitStringType {namedBits=Nothing}), assignmentValue=[HStringToken [H3]]}],
          testParse "TypeA := TypeC TypeB := OCTET STRING TypeC := TypeB"
-                   [TypeAssignment "TypeA" (Builtin OctetStringType), TypeAssignment "TypeB" (Builtin OctetStringType), TypeAssignment "TypeC" (Builtin OctetStringType)]
+                   [TypeAssignment "TypeA" (Builtin OctetStringType), TypeAssignment "TypeB" (Builtin OctetStringType), TypeAssignment "TypeC" (Builtin OctetStringType)],
+         testParse "TypeA := CHOICE { c TypeB } TypeB := CHOICE { c TypeC } TypeC := BOOLEAN"
+                   [TypeAssignment "TypeA" (Builtin (ChoiceType {choices=[WithName "c" (Builtin (ChoiceType {choices=[WithName "c" (Builtin BooleanType)]}))]})), TypeAssignment "TypeB" (Builtin (ChoiceType {choices=[WithName "c" (Builtin BooleanType)]})), TypeAssignment "TypeC" (Builtin BooleanType)]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
