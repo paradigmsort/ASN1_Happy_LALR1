@@ -48,8 +48,8 @@ import Test.HUnit
 AssignmentList : Assignment { [$1] }
                | AssignmentList Assignment { $1 ++ [$2] }
 
-Assignment : TypeAssignment { $1 }
-           | ValueAssignment { $1 }
+Assignment : TypeAssignment { WithRef $1 }
+           | ValueAssignment { WithRef $1 }
 
 TypeAssignment : TYPE_OR_MODULE_REFERENCE ':=' Type { TypeAssignment $1 $3 }
 
@@ -214,8 +214,11 @@ SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
-data ASN1Assignment = TypeAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type }
-                    | ValueAssignment { name :: String, asn1Type::ASN1BuiltinOrReference ASN1Type, assignmentValue::[ASN1Token] } deriving (Show, Eq)
+data ASN1StagedAssignment a = TypeAssignment { name :: String, asn1Type::a }
+                            | ValueAssignment { name :: String, asn1Type::a, assignmentValue::[ASN1Token] } deriving (Show, Eq)
+
+data ASN1Assignment = WithRef (ASN1StagedAssignment (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
+
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
@@ -280,8 +283,8 @@ bitsToOctets bits = let (eight, rest) = splitAt 8 bits in
 
 findTypeByName :: [ASN1Assignment] -> String -> ASN1BuiltinOrReference ASN1Type
 findTypeByName [] n = error ("could not resolve reference to type " ++ n)
-findTypeByName ((TypeAssignment cn t):xs) n = if n == cn then t else findTypeByName xs n
-findTypeByName ((ValueAssignment _ _ _):xs) n = findTypeByName xs n
+findTypeByName (WithRef (TypeAssignment cn t):xs) n = if n == cn then t else findTypeByName xs n
+findTypeByName (WithRef (ValueAssignment _ _ _):xs) n = findTypeByName xs n
 
 resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1Type
 resolveTypeReference as (Builtin b) = b
@@ -306,8 +309,8 @@ resolveTypesInAssignment :: [ASN1Assignment] -> ASN1Assignment -> ASN1FinalAssig
 resolveTypesInAssignment as = mapTypeInAssignment (resolveTypeCompletely as)
 
 mapTypeInAssignment :: (ASN1BuiltinOrReference ASN1Type -> ASN1FinalType) -> ASN1Assignment -> ASN1FinalAssignment
-mapTypeInAssignment f (TypeAssignment n t) = FinalTypeAssignment n (f t)
-mapTypeInAssignment f (ValueAssignment n t v) = FinalValueAssignment n (f t) v
+mapTypeInAssignment f (WithRef (TypeAssignment n t)) = FinalTypeAssignment n (f t)
+mapTypeInAssignment f (WithRef (ValueAssignment n t v)) = FinalValueAssignment n (f t) v
 
 resolveTypes :: [ASN1Assignment] -> [ASN1FinalAssignment]
 resolveTypes x = map (resolveTypesInAssignment x) x
