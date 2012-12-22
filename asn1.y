@@ -1,6 +1,7 @@
 {
 module ASN1 where
 import ASN1Lexer
+import Data.List
 import Test.HUnit
 }
 
@@ -263,15 +264,18 @@ instance Functor ASN1RequiredOrOptional where
   fmap f (Optional a) = Optional (f a)
 
 parseValueByType :: ASN1FinalType -> [ASN1Token] -> ASN1Value
-parseValueByType (Final t) toks = case t of BitStringType _ -> parseBitStringValue toks
-                                            BooleanType -> parseBooleanValue toks
-                                            ChoiceType choices -> case parseChoiceValue toks of (choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)
-                                            IntegerType _ -> parseIntegerValue toks
-                                            OctetStringType -> parseOctetStringValue toks
+parseValueByType (Final t) = case t of BitStringType _ -> parseBitStringValue
+                                       BooleanType -> parseBooleanValue
+                                       ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)) . parseChoiceValue 
+                                       IntegerType _ -> parseIntegerValue
+                                       OctetStringType -> parseOctetStringValue
+
+isNamed :: String -> ASN1WithName a -> Bool
+isNamed name (WithName named _) = name == named
 
 findTypeInChoicesByName :: [ASN1WithName ASN1FinalType] -> String -> ASN1FinalType
-findTypeInChoicesByName [] choice = error ("could not find choice " ++ choice)
-findTypeInChoicesByName ((WithName name namedType):xs) choice = if choice == name then namedType else findTypeInChoicesByName xs choice
+findTypeInChoicesByName as n = case find (isNamed n) as of Nothing -> error ("could not find choice " ++ n)
+                                                           Just (WithName _ namedType) -> namedType
 
 makeOctet :: [Bit] -> Octet
 makeOctet (a:b:c:d:e:f:g:h:[]) = (a,b,c,d,e,f,g,h)
@@ -281,10 +285,13 @@ bitsToOctets bits = let (eight, rest) = splitAt 8 bits in
                     case rest of [] -> [makeOctet (take 8 (bits ++ (repeat B0)))]
                                  otherwise -> makeOctet eight : bitsToOctets rest
 
+definesType :: String -> ASN1Assignment -> Bool
+definesType name (WithRef (TypeAssignment n t)) = n == name
+definesType name (WithRef (ValueAssignment _ _ _)) = False
+
 findTypeByName :: [ASN1Assignment] -> String -> ASN1BuiltinOrReference ASN1Type
-findTypeByName [] n = error ("could not resolve reference to type " ++ n)
-findTypeByName (WithRef (TypeAssignment cn t):xs) n = if n == cn then t else findTypeByName xs n
-findTypeByName (WithRef (ValueAssignment _ _ _):xs) n = findTypeByName xs n
+findTypeByName as n = case find (definesType n) as of Nothing -> error ("could not resolve reference to type " ++ n)
+                                                      Just (WithRef (TypeAssignment n t)) -> t
 
 resolveTypeReference :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1Type
 resolveTypeReference as (Builtin b) = b
