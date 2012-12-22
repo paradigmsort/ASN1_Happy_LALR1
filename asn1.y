@@ -1,6 +1,7 @@
 {
 module ASN1 where
 import ASN1Lexer
+import BasicTypes
 import Data.List
 import Test.HUnit
 }
@@ -245,7 +246,6 @@ data ASN1StagedType a = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1Bu
 data ASN1Type = Stage0 (ASN1StagedType (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
 data ASN1FinalType = Final (ASN1StagedType ASN1FinalType) deriving (Show, Eq)
 
-type Octet = (Bit,Bit,Bit,Bit,Bit,Bit,Bit,Bit)
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
                | ChoiceValue { chosen :: String, choiceValue :: ASN1Value }
@@ -277,14 +277,6 @@ findTypeInChoicesByName :: [ASN1WithName ASN1FinalType] -> String -> ASN1FinalTy
 findTypeInChoicesByName as n = case find (isNamed n) as of Nothing -> error ("could not find choice " ++ n)
                                                            Just (WithName _ namedType) -> namedType
 
-makeOctet :: [Bit] -> Octet
-makeOctet (a:b:c:d:e:f:g:h:[]) = (a,b,c,d,e,f,g,h)
-
-bitsToOctets :: [Bit] -> [Octet]
-bitsToOctets bits = let (eight, rest) = splitAt 8 bits in
-                    case rest of [] -> [makeOctet (take 8 (bits ++ (repeat B0)))]
-                                 otherwise -> makeOctet eight : bitsToOctets rest
-
 definesType :: String -> ASN1Assignment -> Bool
 definesType name (WithRef (TypeAssignment n t)) = n == name
 definesType name (WithRef (ValueAssignment _ _ _)) = False
@@ -305,8 +297,8 @@ resolveTypeComponents as (Stage0 t) = Final (case t of BitStringType namedBits -
                                                        IntegerType namedIntegerValues -> IntegerType namedIntegerValues
                                                        OctetStringType -> OctetStringType
                                                        SequenceType pre ext post -> SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
-                                                                                                            (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
-                                                                                                            (map (fmap (fmap (resolveTypeCompletely as))) post)
+                                                                                                 (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
+                                                                                                 (map (fmap (fmap (resolveTypeCompletely as))) post)
                                                        SequenceOfType stype -> SequenceOfType (fmap (resolveTypeCompletely as) stype))
 
 resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1Type -> ASN1FinalType
