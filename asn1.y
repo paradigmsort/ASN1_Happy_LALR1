@@ -100,7 +100,7 @@ RootAlternativeTypeList : AlternativeTypeList { $1 }
 AlternativeTypeList : NamedType { [$1] }
                     | AlternativeTypeList ',' NamedType { $1 ++ [$3] }
 
-ChoiceValue : IDENTIFIER_OR_VALUE_REFERENCE ':' Value { ChoiceValue { chosen = $1, choiceValue = $3 } }
+ChoiceValue : IDENTIFIER_OR_VALUE_REFERENCE ':' Value { ($1, $3) }
 
 IntegerType : 'INTEGER' { IntegerType { namedIntegerValues = Nothing } }
             | 'INTEGER' '{' NamedNumberList '}' { IntegerType { namedIntegerValues = Just $3 } }
@@ -247,7 +247,7 @@ data ASN1FinalType = Final (ASN1StagedType ASN1FinalType) deriving (Show, Eq)
 type Octet = (Bit,Bit,Bit,Bit,Bit,Bit,Bit,Bit)
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
-               | ChoiceValue { chosen :: String, choiceValue :: [ASN1Token] }
+               | ChoiceValue { chosen :: String, choiceValue :: ASN1Value }
                | IntegerValue (ASN1BuiltinOrReference Integer)
                | OctetStringValue [Octet] deriving (Show, Eq)
 
@@ -263,11 +263,15 @@ instance Functor ASN1RequiredOrOptional where
   fmap f (Optional a) = Optional (f a)
 
 parseValueByType :: ASN1FinalType -> [ASN1Token] -> ASN1Value
-parseValueByType (Final t) = case t of BitStringType _ -> parseBitStringValue
-                                       BooleanType -> parseBooleanValue
-                                       ChoiceType _ -> parseChoiceValue
-                                       IntegerType _ -> parseIntegerValue
-                                       OctetStringType -> parseOctetStringValue
+parseValueByType (Final t) toks = case t of BitStringType _ -> parseBitStringValue toks
+                                            BooleanType -> parseBooleanValue toks
+                                            ChoiceType choices -> case parseChoiceValue toks of (choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)
+                                            IntegerType _ -> parseIntegerValue toks
+                                            OctetStringType -> parseOctetStringValue toks
+
+findTypeInChoicesByName :: [ASN1WithName ASN1FinalType] -> String -> ASN1FinalType
+findTypeInChoicesByName [] choice = error ("could not find choice " ++ choice)
+findTypeInChoicesByName ((WithName name namedType):xs) choice = if choice == name then namedType else findTypeInChoicesByName xs choice
 
 makeOctet :: [Bit] -> Octet
 makeOctet (a:b:c:d:e:f:g:h:[]) = (a,b,c,d,e,f,g,h)
@@ -368,7 +372,7 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA INTEGER {five(5)} := two"
                    [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]})), assignmentValue=IntegerValue (Reference "two")})],
          testParse "valueA CHOICE {choiceA BOOLEAN } := choiceA : TRUE"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (ChoiceType {choices=[WithName "choiceA" (Final BooleanType)]})), assignmentValue=ChoiceValue "choiceA" [KeywordToken "TRUE"]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (ChoiceType {choices=[WithName "choiceA" (Final BooleanType)]})), assignmentValue=ChoiceValue "choiceA" (BooleanValue True)})],
          testParse "valueA BIT STRING := \'0000\'B"
                    [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (BitStringType {namedBits=Nothing})), assignmentValue=BitStringValue [B0,B0,B0,B0]})],
          testParse "valueA BIT STRING := \'3\'H"
