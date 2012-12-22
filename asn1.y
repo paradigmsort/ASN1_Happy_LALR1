@@ -380,7 +380,11 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := TypeC TypeB := OCTET STRING TypeC := TypeB"
                    [ValParsed (TypeAssignment "TypeA" (Final OctetStringType)), ValParsed (TypeAssignment "TypeB" (Final OctetStringType)), ValParsed (TypeAssignment "TypeC" (Final OctetStringType))],
          testParse "TypeA := CHOICE { c TypeB } TypeB := CHOICE { c TypeC } TypeC := BOOLEAN"
-                   [ValParsed (TypeAssignment "TypeA" (Final (ChoiceType {choices=[WithName "c" (Final (ChoiceType {choices=[WithName "c" (Final BooleanType)]}))]}))), ValParsed (TypeAssignment "TypeB" (Final (ChoiceType {choices=[WithName "c" (Final BooleanType)]}))), ValParsed (TypeAssignment "TypeC" (Final BooleanType))]
+                   [ValParsed (TypeAssignment "TypeA" (Final (ChoiceType {choices=[WithName "c" (Final (ChoiceType {choices=[WithName "c" (Final BooleanType)]}))]}))), ValParsed (TypeAssignment "TypeB" (Final (ChoiceType {choices=[WithName "c" (Final BooleanType)]}))), ValParsed (TypeAssignment "TypeC" (Final BooleanType))],
+         testParse "valueA OCTET STRING := \'1\'B"
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final OctetStringType, assignmentValue=OctetStringValue[(B1,B0,B0,B0,B0,B0,B0,B0)]})],
+         testParse "valueA OCTET STRING := \'33\'H"
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final OctetStringType, assignmentValue=OctetStringValue[(B0,B0,B1,B1,B0,B0,B1,B1)]})]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
