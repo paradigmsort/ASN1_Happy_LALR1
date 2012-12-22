@@ -364,19 +364,19 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE OF OCTET STRING"
                    [ValParsed (TypeAssignment "TypeA" (Final (SequenceOfType (Unnamed (Final OctetStringType)))))],
          testParse "valueA BOOLEAN := TRUE"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final BooleanType), assignmentValue=BooleanValue True})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final BooleanType, assignmentValue=BooleanValue True})],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final BooleanType), assignmentValue=BooleanValue False}), (ValParsed TypeAssignment {name="TypeA", asn1Type=(Final BooleanType)})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final BooleanType, assignmentValue=BooleanValue False}), (ValParsed TypeAssignment {name="TypeA", asn1Type=(Final BooleanType)})],
          testParse "valueA INTEGER := -5"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (IntegerType {namedIntegerValues=Nothing})), assignmentValue=IntegerValue (Builtin (-5))})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final (IntegerType {namedIntegerValues=Nothing}), assignmentValue=IntegerValue (Builtin (-5))})],
          testParse "valueA INTEGER {five(5)} := two"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]})), assignmentValue=IntegerValue (Reference "two")})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=IntegerValue (Reference "two")})],
          testParse "valueA CHOICE {choiceA BOOLEAN } := choiceA : TRUE"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (ChoiceType {choices=[WithName "choiceA" (Final BooleanType)]})), assignmentValue=ChoiceValue "choiceA" (BooleanValue True)})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final (ChoiceType {choices=[WithName "choiceA" (Final BooleanType)]}), assignmentValue=ChoiceValue "choiceA" (BooleanValue True)})],
          testParse "valueA BIT STRING := \'0000\'B"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (BitStringType {namedBits=Nothing})), assignmentValue=BitStringValue [B0,B0,B0,B0]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final (BitStringType {namedBits=Nothing}), assignmentValue=BitStringValue [B0,B0,B0,B0]})],
          testParse "valueA BIT STRING := \'3\'H"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=(Final (BitStringType {namedBits=Nothing})), assignmentValue=BitStringValue [B0,B0,B1,B1]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final (BitStringType {namedBits=Nothing}), assignmentValue=BitStringValue [B0,B0,B1,B1]})],
          testParse "TypeA := TypeC TypeB := OCTET STRING TypeC := TypeB"
                    [ValParsed (TypeAssignment "TypeA" (Final OctetStringType)), ValParsed (TypeAssignment "TypeB" (Final OctetStringType)), ValParsed (TypeAssignment "TypeC" (Final OctetStringType))],
          testParse "TypeA := CHOICE { c TypeB } TypeB := CHOICE { c TypeC } TypeC := BOOLEAN"
