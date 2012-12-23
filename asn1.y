@@ -414,7 +414,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE { a BOOLEAN DEFAULT TRUE }"
                    [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Default (WithName "a" (TypeValParsed BooleanType)) (BooleanValue True)] [] [])))],
          testParse "TypeA := SEQUENCE { b BIT STRING DEFAULT \'10\'B }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Default (WithName "b" (TypeValParsed BitStringType {namedBits = Nothing})) (BitStringValue [B1,B0])] [] [])))]
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Default (WithName "b" (TypeValParsed BitStringType {namedBits = Nothing})) (BitStringValue [B1,B0])] [] [])))],
+         testParse "TypeA := SEQUENCE OF CHOICE { s SEQUENCE { o OCTET STRING DEFAULT \'F\'H } }"
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed (ChoiceType {choices=[WithName "s" (TypeValParsed (SequenceType [Default (WithName "o" (TypeValParsed OctetStringType)) (OctetStringValue [(B1,B1,B1,B1,B0,B0,B0,B0)])] [] []))]}))))))]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
