@@ -79,6 +79,10 @@ DefinedValue : IDENTIFIER_OR_VALUE_REFERENCE { $1 }
 
 Value : BuiltinValue { $1 }
 
+{-
+Parses values of all types and retuns only the token sequence.
+There are reduce/reduce conflicts between values that are resolved by knowing the type.
+-}
 BuiltinValue : BSTRING { [BStringToken $1] } --BitStringValue, OctetStringValue
              | HSTRING { [HStringToken $1] }
              | 'TRUE' { [KeywordToken "TRUE"] } --BooleanValue
