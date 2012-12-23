@@ -12,6 +12,7 @@ import Test.HUnit
 %name parseChoiceValue ChoiceValue
 %name parseIntegerValue IntegerValue
 %name parseOctetStringValue OctetStringValue
+%name parseSequenceOfValue SequenceOfValue
 %tokentype { ASN1Token }
 %error { parseError }
 
@@ -92,6 +93,11 @@ BuiltinValue : BSTRING { [BStringToken $1] } --BitStringValue, OctetStringValue
              | NUMBER { [NumberToken $1] } --IntegerValue
              | '-' NUMBER { [KeywordToken "-", NumberToken $2] }
              | IDENTIFIER_OR_VALUE_REFERENCE { [IdentifierOrValueReferenceToken $1] }
+             | '{' '}' { [KeywordToken "{", KeywordToken "}"] } --SequenceOfValue
+             | '{' BuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] } 
+
+BuiltinValueList : BuiltinValue { $1 }
+                 | BuiltinValueList ',' BuiltinValue { $1 ++ [KeywordToken ","] ++ $3 }
 
 BooleanType : 'BOOLEAN' { BooleanType }
 
@@ -218,6 +224,12 @@ ComponentType : NamedType { Required $1 }
 SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
                | 'SEQUENCE' 'OF' NamedType { SequenceOfType (Named $3) }
 
+SequenceOfValue : '{' '}' { [] }
+                | '{' ValueList '}' { $2 }
+
+ValueList : Value { [$1] }
+          | ValueList ',' Value { $1 ++ [$3] }
+
 {
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
@@ -259,7 +271,8 @@ data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
                | ChoiceValue { chosen :: String, choiceValue :: ASN1Value }
                | IntegerValue (ASN1BuiltinOrReference Integer)
-               | OctetStringValue [Octet] deriving (Show, Eq)
+               | OctetStringValue [Octet]
+               | SequenceOfValue [ASN1Value] deriving (Show, Eq)
 
 instance Functor ASN1WithName where
   fmap f (WithName n x) = WithName n (f x)
@@ -273,12 +286,17 @@ instance Functor (ASN1RequiredOptionalOrDefault b) where
   fmap f (Optional a) = Optional (f a)
   fmap f (Default a b) = Default (f a) b
 
+fromOptionallyNamed :: ASN1OptionallyNamed a -> a
+fromOptionallyNamed (Unnamed a) = a
+fromOptionallyNamed (Named (WithName n a)) = a
+
 parseValueByType :: ASN1TypeNoRef -> [ASN1Token] -> ASN1Value
 parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValue
                                            BooleanType -> parseBooleanValue
                                            ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)) . parseChoiceValue 
                                            IntegerType _ -> parseIntegerValue
                                            OctetStringType -> parseOctetStringValue
+                                           SequenceOfType stype -> SequenceOfValue . (map (parseValueByType (fromOptionallyNamed stype))) . parseSequenceOfValue
 
 parseValuesInROD :: ASN1RequiredOptionalOrDefault [ASN1Token] (ASN1WithName ASN1TypeNoRef) -> ASN1RequiredOptionalOrDefault ASN1Value (ASN1WithName ASN1TypeValueParsed)
 parseValuesInROD (Required (WithName n t)) = Required (WithName n (parseValuesInType t))
@@ -416,7 +434,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE { b BIT STRING DEFAULT \'10\'B }"
                    [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Default (WithName "b" (TypeValParsed BitStringType {namedBits = Nothing})) (BitStringValue [B1,B0])] [] [])))],
          testParse "TypeA := SEQUENCE OF CHOICE { s SEQUENCE { o OCTET STRING DEFAULT \'F\'H } }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed (ChoiceType {choices=[WithName "s" (TypeValParsed (SequenceType [Default (WithName "o" (TypeValParsed OctetStringType)) (OctetStringValue [(B1,B1,B1,B1,B0,B0,B0,B0)])] [] []))]}))))))]
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed (ChoiceType {choices=[WithName "s" (TypeValParsed (SequenceType [Default (WithName "o" (TypeValParsed OctetStringType)) (OctetStringValue [(B1,B1,B1,B1,B0,B0,B0,B0)])] [] []))]}))))))],
+         testParse "valueA SEQUENCE OF BOOLEAN := { TRUE , FALSE }"
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceOfType (Unnamed (TypeValParsed BooleanType))), assignmentValue=SequenceOfValue [BooleanValue True, BooleanValue False]})]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
