@@ -226,7 +226,7 @@ data ASN1StagedAssignment a b = TypeAssignment { name :: String, asn1Type::a }
                               | ValueAssignment { name :: String, asn1Type::a, assignmentValue::b } deriving (Show, Eq)
 data ASN1Assignment = WithRef (ASN1StagedAssignment (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
 data ASN1TypeNoRefAssignment = NoRef (ASN1StagedAssignment ASN1TypeNoRef [ASN1Token]) deriving (Show, Eq)
-data ASN1ValueParsedAssignment = ValParsed (ASN1StagedAssignment ASN1TypeNoRef ASN1Value) deriving (Show, Eq)
+data ASN1ValueParsedAssignment = ValParsed (ASN1StagedAssignment ASN1TypeValueParsed ASN1Value) deriving (Show, Eq)
 
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
@@ -253,6 +253,7 @@ data ASN1StagedType a b = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1
 
 data ASN1TypeWithRef = TypeWithRef (ASN1StagedType (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
 data ASN1TypeNoRef = TypeNoRef (ASN1StagedType ASN1TypeNoRef [ASN1Token]) deriving (Show, Eq)
+data ASN1TypeValueParsed = TypeValParsed (ASN1StagedType ASN1TypeValueParsed ASN1Value) deriving (Show, Eq)
 
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
@@ -278,6 +279,23 @@ parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValu
                                            ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)) . parseChoiceValue 
                                            IntegerType _ -> parseIntegerValue
                                            OctetStringType -> parseOctetStringValue
+
+parseValuesInROD :: ASN1RequiredOptionalOrDefault [ASN1Token] (ASN1WithName ASN1TypeNoRef) -> ASN1RequiredOptionalOrDefault ASN1Value (ASN1WithName ASN1TypeValueParsed)
+parseValuesInROD (Required (WithName n t)) = Required (WithName n (parseValuesInType t))
+parseValuesInROD (Optional (WithName n t)) = Optional (WithName n (parseValuesInType t))
+parseValuesInROD (Default (WithName n t) v) = Default (WithName n (parseValuesInType t)) (parseValueByType t v)
+
+parseValuesInType :: ASN1TypeNoRef -> ASN1TypeValueParsed
+parseValuesInType (TypeNoRef t) = TypeValParsed (case t of BitStringType namedBits -> BitStringType namedBits
+                                                           BooleanType -> BooleanType
+                                                           ChoiceType choices -> ChoiceType (map (fmap parseValuesInType) choices)
+                                                           EnumeratedType entries -> EnumeratedType entries
+                                                           IntegerType namedIntegerValues -> IntegerType namedIntegerValues
+                                                           OctetStringType -> OctetStringType
+                                                           SequenceType pre ext post -> SequenceType (map parseValuesInROD pre)
+                                                                                                     (map (map parseValuesInROD) ext)
+                                                                                                     (map parseValuesInROD post)
+                                                           SequenceOfType stype -> SequenceOfType (fmap parseValuesInType stype))
 
 isNamed :: String -> ASN1WithName a -> Bool
 isNamed name (WithName named _) = name == named
@@ -324,8 +342,8 @@ resolveTypes :: [ASN1Assignment] -> [ASN1TypeNoRefAssignment]
 resolveTypes x = map (resolveTypesInAssignment x) x
 
 parseValueInAssignment :: ASN1TypeNoRefAssignment -> ASN1ValueParsedAssignment
-parseValueInAssignment (NoRef (TypeAssignment n t)) = ValParsed (TypeAssignment n t)
-parseValueInAssignment (NoRef (ValueAssignment n t v)) = ValParsed (ValueAssignment n t (parseValueByType t v))
+parseValueInAssignment (NoRef (TypeAssignment n t)) = ValParsed (TypeAssignment n (parseValuesInType t))
+parseValueInAssignment (NoRef (ValueAssignment n t v)) = ValParsed (ValueAssignment n (parseValuesInType t) (parseValueByType t v))
 
 parseValues :: [ASN1TypeNoRefAssignment] -> [ASN1ValueParsedAssignment]
 parseValues x = map parseValueInAssignment x
@@ -334,69 +352,69 @@ testParse :: String -> [ASN1ValueParsedAssignment] -> IO ()
 testParse input expected = assertEqual input expected ((parseValues . resolveTypes . parse . alexScanTokens) input)
 
 tests = [testParse "TypeA := BOOLEAN"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef BooleanType))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed BooleanType))],
          testParse "TypeA := TypeB TypeB := BOOLEAN"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef BooleanType)), ValParsed (TypeAssignment "TypeB" (TypeNoRef BooleanType))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed BooleanType)), ValParsed (TypeAssignment "TypeB" (TypeValParsed BooleanType))],
          testParse "TypeA := CHOICE { bool BOOLEAN }"
-                   [ValParsed (TypeAssignment "TypeA" ((TypeNoRef ChoiceType {choices=[WithName "bool" (TypeNoRef BooleanType)]})))],
+                   [ValParsed (TypeAssignment "TypeA" ((TypeValParsed ChoiceType {choices=[WithName "bool" (TypeValParsed BooleanType)]})))],
          testParse "TypeA := INTEGER { two(2) }"
-                   [ValParsed (TypeAssignment "TypeA" ((TypeNoRef IntegerType {namedIntegerValues=Just [WithName "two" (Builtin 2)]})))],
+                   [ValParsed (TypeAssignment "TypeA" ((TypeValParsed IntegerType {namedIntegerValues=Just [WithName "two" (Builtin 2)]})))],
          testParse "TypeA := SEQUENCE OF TypeB TypeB := BOOLEAN"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceOfType (Unnamed (TypeNoRef BooleanType))))), ValParsed (TypeAssignment "TypeB" (TypeNoRef BooleanType))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed BooleanType))))), ValParsed (TypeAssignment "TypeB" (TypeValParsed BooleanType))],
          testParse "TypeA := SEQUENCE OF bool BOOLEAN"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceOfType (Named (WithName "bool" (TypeNoRef BooleanType))))))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Named (WithName "bool" (TypeValParsed BooleanType))))))],
          testParse "TypeA := SEQUENCE { }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [] [] [])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [] [] [])))],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN , boolB BOOLEAN }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [Required (WithName "boolA" (TypeNoRef BooleanType)),Required (WithName "boolB" (TypeNoRef BooleanType))] [] [])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Required (WithName "boolA" (TypeValParsed BooleanType)),Required (WithName "boolB" (TypeValParsed BooleanType))] [] [])))],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN OPTIONAL }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [Optional (WithName "boolA" (TypeNoRef BooleanType))] [] [])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Optional (WithName "boolA" (TypeValParsed BooleanType))] [] [])))],
          testParse "TypeA := SEQUENCE { boolA BOOLEAN, ... }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [Required (WithName "boolA" (TypeNoRef BooleanType))] [] [])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Required (WithName "boolA" (TypeValParsed BooleanType))] [] [])))],
          testParse "TypeA := SEQUENCE { ... , ... , boolA BOOLEAN }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [] [] [Required (WithName "boolA" (TypeNoRef BooleanType))])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [] [] [Required (WithName "boolA" (TypeValParsed BooleanType))])))],
          testParse "TypeA := SEQUENCE { ... , boolA BOOLEAN , ... }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [] [[Required (WithName "boolA" (TypeNoRef BooleanType))]] [])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [] [[Required (WithName "boolA" (TypeValParsed BooleanType))]] [])))],
          testParse "TypeA := SEQUENCE OF CHOICE { b BOOLEAN , i INTEGER }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceOfType (Unnamed (TypeNoRef (ChoiceType {choices=[WithName "b" (TypeNoRef BooleanType), WithName "i" (TypeNoRef (IntegerType {namedIntegerValues=Nothing}))]}))))))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed (ChoiceType {choices=[WithName "b" (TypeValParsed BooleanType), WithName "i" (TypeValParsed (IntegerType {namedIntegerValues=Nothing}))]}))))))],
          testParse "TypeA := SEQUENCE OF SEQUENCE { b BOOLEAN, ... , ...}"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceOfType (Unnamed (TypeNoRef (SequenceType [Required (WithName "b" (TypeNoRef BooleanType))] [] []))))))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed (SequenceType [Required (WithName "b" (TypeValParsed BooleanType))] [] []))))))],
          testParse "TypeA := ENUMERATED { red, green }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "red", UnnumberedEnumerationEntry "green"])))],
          testParse "TypeA := ENUMERATED { red(1), green, blue(2) }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Builtin 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Builtin 2))])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (EnumeratedType [NumberedEnumerationEntry (WithName "red" (Builtin 1)), UnnumberedEnumerationEntry "green", NumberedEnumerationEntry (WithName "blue" (Builtin 2))])))],
          testParse "TypeA := BIT STRING"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (BitStringType {namedBits = Nothing})))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (BitStringType {namedBits = Nothing})))],
          testParse "TypeA := BIT STRING { omit-start(0), omit-end(1) }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (BitStringType {namedBits = Just [WithName "omit-start" (Builtin 0), WithName "omit-end" (Builtin 1)]})))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (BitStringType {namedBits = Just [WithName "omit-start" (Builtin 0), WithName "omit-end" (Builtin 1)]})))],
          testParse "TypeA := SEQUENCE OF OCTET STRING"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceOfType (Unnamed (TypeNoRef OctetStringType)))))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed OctetStringType)))))],
          testParse "valueA BOOLEAN := TRUE"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef BooleanType, assignmentValue=BooleanValue True})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed BooleanType, assignmentValue=BooleanValue True})],
          testParse "valueA TypeA := FALSE TypeA := BOOLEAN"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef BooleanType, assignmentValue=BooleanValue False}), (ValParsed TypeAssignment {name="TypeA", asn1Type=(TypeNoRef BooleanType)})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed BooleanType, assignmentValue=BooleanValue False}), (ValParsed TypeAssignment {name="TypeA", asn1Type=(TypeValParsed BooleanType)})],
          testParse "valueA INTEGER := -5"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef (IntegerType {namedIntegerValues=Nothing}), assignmentValue=IntegerValue (Builtin (-5))})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (IntegerType {namedIntegerValues=Nothing}), assignmentValue=IntegerValue (Builtin (-5))})],
          testParse "valueA INTEGER {five(5)} := two"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=IntegerValue (Reference "two")})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (IntegerType {namedIntegerValues= Just [WithName "five" (Builtin 5)]}), assignmentValue=IntegerValue (Reference "two")})],
          testParse "valueA CHOICE {choiceA BOOLEAN } := choiceA : TRUE"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef (ChoiceType {choices=[WithName "choiceA" (TypeNoRef BooleanType)]}), assignmentValue=ChoiceValue "choiceA" (BooleanValue True)})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (ChoiceType {choices=[WithName "choiceA" (TypeValParsed BooleanType)]}), assignmentValue=ChoiceValue "choiceA" (BooleanValue True)})],
          testParse "valueA BIT STRING := \'0000\'B"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef (BitStringType {namedBits=Nothing}), assignmentValue=BitStringValue [B0,B0,B0,B0]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (BitStringType {namedBits=Nothing}), assignmentValue=BitStringValue [B0,B0,B0,B0]})],
          testParse "valueA BIT STRING := \'3\'H"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef (BitStringType {namedBits=Nothing}), assignmentValue=BitStringValue [B0,B0,B1,B1]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (BitStringType {namedBits=Nothing}), assignmentValue=BitStringValue [B0,B0,B1,B1]})],
          testParse "TypeA := TypeC TypeB := OCTET STRING TypeC := TypeB"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef OctetStringType)), ValParsed (TypeAssignment "TypeB" (TypeNoRef OctetStringType)), ValParsed (TypeAssignment "TypeC" (TypeNoRef OctetStringType))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed OctetStringType)), ValParsed (TypeAssignment "TypeB" (TypeValParsed OctetStringType)), ValParsed (TypeAssignment "TypeC" (TypeValParsed OctetStringType))],
          testParse "TypeA := CHOICE { c TypeB } TypeB := CHOICE { c TypeC } TypeC := BOOLEAN"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (ChoiceType {choices=[WithName "c" (TypeNoRef (ChoiceType {choices=[WithName "c" (TypeNoRef BooleanType)]}))]}))), ValParsed (TypeAssignment "TypeB" (TypeNoRef (ChoiceType {choices=[WithName "c" (TypeNoRef BooleanType)]}))), ValParsed (TypeAssignment "TypeC" (TypeNoRef BooleanType))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (ChoiceType {choices=[WithName "c" (TypeValParsed (ChoiceType {choices=[WithName "c" (TypeValParsed BooleanType)]}))]}))), ValParsed (TypeAssignment "TypeB" (TypeValParsed (ChoiceType {choices=[WithName "c" (TypeValParsed BooleanType)]}))), ValParsed (TypeAssignment "TypeC" (TypeValParsed BooleanType))],
          testParse "valueA OCTET STRING := \'1\'B"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef OctetStringType, assignmentValue=OctetStringValue[(B1,B0,B0,B0,B0,B0,B0,B0)]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed OctetStringType, assignmentValue=OctetStringValue[(B1,B0,B0,B0,B0,B0,B0,B0)]})],
          testParse "valueA OCTET STRING := \'33\'H"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeNoRef OctetStringType, assignmentValue=OctetStringValue[(B0,B0,B1,B1,B0,B0,B1,B1)]})],
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed OctetStringType, assignmentValue=OctetStringValue[(B0,B0,B1,B1,B0,B0,B1,B1)]})],
          testParse "TypeA := SEQUENCE { a BOOLEAN DEFAULT TRUE }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [Default (WithName "a" (TypeNoRef BooleanType)) [KeywordToken "TRUE"]] [] [])))],
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Default (WithName "a" (TypeValParsed BooleanType)) (BooleanValue True)] [] [])))],
          testParse "TypeA := SEQUENCE { b BIT STRING DEFAULT \'10\'B }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeNoRef (SequenceType [Default (WithName "b" (TypeNoRef BitStringType {namedBits = Nothing})) [BStringToken [B1,B0]]] [] [])))]
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceType [Default (WithName "b" (TypeValParsed BitStringType {namedBits = Nothing})) (BitStringValue [B1,B0])] [] [])))]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
