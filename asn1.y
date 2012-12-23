@@ -35,6 +35,7 @@ import Test.HUnit
     'BIT'                               { KeywordToken "BIT" }
     'BOOLEAN'                           { KeywordToken "BOOLEAN" }
     'CHOICE'                            { KeywordToken "CHOICE" }
+    'DEFAULT'                           { KeywordToken "DEFAULT"}
     'ENUMERATED'                        { KeywordToken "ENUMERATED" }
     'INTEGER'                           { KeywordToken "INTEGER" }
     'OCTET'                             { KeywordToken "OCTET" }
@@ -212,6 +213,7 @@ ComponentTypeList : ComponentType { [$1] }
 
 ComponentType : NamedType { Required $1 }
               | NamedType 'OPTIONAL' { Optional $1 }
+              | NamedType 'DEFAULT' Value { Default $1 $3 }
 
 SequenceOfType : 'SEQUENCE' 'OF' Type { SequenceOfType (Unnamed $3) }
                | 'SEQUENCE' 'OF' NamedType { SequenceOfType (Named $3) }
@@ -231,24 +233,26 @@ data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
 data ASN1BuiltinOrReference a = Builtin a 
                               | Reference String deriving (Show, Eq)
-data ASN1RequiredOrOptional a = Required a
-                              | Optional a deriving (Show, Eq)
+data ASN1RequiredOptionalOrDefault b a = Required a
+                                       | Optional a 
+                                       | Default a b deriving (Show, Eq)
 data ASN1EnumerationEntry = UnnumberedEnumerationEntry String
                           | NumberedEnumerationEntry (ASN1WithName (ASN1BuiltinOrReference Integer)) deriving (Show, Eq)
-data ASN1StagedType a = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] }
-                      | BooleanType
-                      | ChoiceType { choices :: [ASN1WithName a] }
-                      | EnumeratedType [ASN1EnumerationEntry]
-                      | IntegerType { namedIntegerValues :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] }
-                      | OctetStringType
-                      | SequenceType {
-                                       preExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName a )],
-                                       extensonAdditions :: [[ASN1RequiredOrOptional (ASN1WithName a )]],
-                                       postExtensionComponents :: [ASN1RequiredOrOptional (ASN1WithName a )]
-                                     }
-                      | SequenceOfType (ASN1OptionallyNamed a) deriving (Show, Eq)
-data ASN1Type = Stage0 (ASN1StagedType (ASN1BuiltinOrReference ASN1Type)) deriving (Show, Eq)
-data ASN1FinalType = Final (ASN1StagedType ASN1FinalType) deriving (Show, Eq)
+data ASN1StagedType a b = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] }
+                        | BooleanType
+                        | ChoiceType { choices :: [ASN1WithName a] }
+                        | EnumeratedType [ASN1EnumerationEntry]
+                        | IntegerType { namedIntegerValues :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] }
+                        | OctetStringType
+                        | SequenceType {
+                                         preExtensionComponents :: [ASN1RequiredOptionalOrDefault b (ASN1WithName a )],
+                                         extensonAdditions :: [[ASN1RequiredOptionalOrDefault b (ASN1WithName a )]],
+                                         postExtensionComponents :: [ASN1RequiredOptionalOrDefault b (ASN1WithName a )]
+                                       }
+                        | SequenceOfType (ASN1OptionallyNamed a) deriving (Show, Eq)
+
+data ASN1Type = Stage0 (ASN1StagedType (ASN1BuiltinOrReference ASN1Type) [ASN1Token]) deriving (Show, Eq)
+data ASN1FinalType = Final (ASN1StagedType ASN1FinalType [ASN1Token]) deriving (Show, Eq)
 
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
@@ -263,9 +267,10 @@ instance Functor ASN1OptionallyNamed where
   fmap f (Unnamed x) = Unnamed (f x)
   fmap f (Named x) = Named (fmap f x)
 
-instance Functor ASN1RequiredOrOptional where
+instance Functor (ASN1RequiredOptionalOrDefault b) where
   fmap f (Required a) = Required (f a)
   fmap f (Optional a) = Optional (f a)
+  fmap f (Default a b) = Default (f a) b
 
 parseValueByType :: ASN1FinalType -> [ASN1Token] -> ASN1Value
 parseValueByType (Final t) = case t of BitStringType _ -> parseBitStringValue
@@ -387,7 +392,11 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "valueA OCTET STRING := \'1\'B"
                    [ValParsed (ValueAssignment {name="valueA", asn1Type=Final OctetStringType, assignmentValue=OctetStringValue[(B1,B0,B0,B0,B0,B0,B0,B0)]})],
          testParse "valueA OCTET STRING := \'33\'H"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final OctetStringType, assignmentValue=OctetStringValue[(B0,B0,B1,B1,B0,B0,B1,B1)]})]
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=Final OctetStringType, assignmentValue=OctetStringValue[(B0,B0,B1,B1,B0,B0,B1,B1)]})],
+         testParse "TypeA := SEQUENCE { a BOOLEAN DEFAULT TRUE }"
+                   [ValParsed (TypeAssignment "TypeA" (Final (SequenceType [Default (WithName "a" (Final BooleanType)) [KeywordToken "TRUE"]] [] [])))],
+         testParse "TypeA := SEQUENCE { b BIT STRING DEFAULT \'10\'B }"
+                   [ValParsed (TypeAssignment "TypeA" (Final (SequenceType [Default (WithName "b" (Final BitStringType {namedBits = Nothing})) [BStringToken [B1,B0]]] [] [])))]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests

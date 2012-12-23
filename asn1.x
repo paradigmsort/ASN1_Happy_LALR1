@@ -30,6 +30,7 @@ tokens :-
     BIT                             { KeywordToken }
     BOOLEAN                         { KeywordToken }
     CHOICE                          { KeywordToken }
+    DEFAULT                         { KeywordToken }
     ENUMERATED                      { KeywordToken }
     INTEGER                         { KeywordToken }
     OCTET                           { KeywordToken }
