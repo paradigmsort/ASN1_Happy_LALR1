@@ -10,6 +10,7 @@ import Test.HUnit
 %name parseBitStringValue BitStringValue
 %name parseBooleanValue BooleanValue
 %name parseChoiceValue ChoiceValue
+%name parseEnumeratedValue EnumeratedValue
 %name parseIntegerValue IntegerValue
 %name parseOctetStringValue OctetStringValue
 %name parseSequenceOfValue SequenceOfValue
@@ -92,7 +93,7 @@ BuiltinValue : BSTRING { [BStringToken $1] } --BitStringValue, OctetStringValue
              | IDENTIFIER_OR_VALUE_REFERENCE ':' Value { [IdentifierOrValueReferenceToken $1, KeywordToken ":"] ++ $3 } --ChoiceValue
              | NUMBER { [NumberToken $1] } --IntegerValue
              | '-' NUMBER { [KeywordToken "-", NumberToken $2] }
-             | IDENTIFIER_OR_VALUE_REFERENCE { [IdentifierOrValueReferenceToken $1] }
+             | IDENTIFIER_OR_VALUE_REFERENCE { [IdentifierOrValueReferenceToken $1] } -- IntegerValue, EnumeratedValue
              | '{' '}' { [KeywordToken "{", KeywordToken "}"] } --SequenceOfValue
              | '{' BuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] } 
 
@@ -141,6 +142,8 @@ Enumeration : EnumerationItem { [$1] }
 
 EnumerationItem : IDENTIFIER_OR_VALUE_REFERENCE { UnnumberedEnumerationEntry $1 }
                 | NamedNumber { NumberedEnumerationEntry $1 }
+
+EnumeratedValue : IDENTIFIER_OR_VALUE_REFERENCE { EnumeratedValue $1 }
 
 BitStringType : 'BIT' 'STRING' { BitStringType Nothing }
               | 'BIT' 'STRING' '{' NamedBitList '}' { BitStringType (Just $4) }
@@ -270,6 +273,7 @@ data ASN1TypeValueParsed = TypeValParsed (ASN1StagedType ASN1TypeValueParsed ASN
 data ASN1Value = BitStringValue [Bit]
                | BooleanValue Bool
                | ChoiceValue { chosen :: String, choiceValue :: ASN1Value }
+               | EnumeratedValue String
                | IntegerValue (ASN1BuiltinOrReference Integer)
                | OctetStringValue [Octet]
                | SequenceOfValue [ASN1Value] deriving (Show, Eq)
@@ -294,6 +298,7 @@ parseValueByType :: ASN1TypeNoRef -> [ASN1Token] -> ASN1Value
 parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValue
                                            BooleanType -> parseBooleanValue
                                            ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)) . parseChoiceValue 
+                                           EnumeratedType _ -> parseEnumeratedValue
                                            IntegerType _ -> parseIntegerValue
                                            OctetStringType -> parseOctetStringValue
                                            SequenceOfType stype -> SequenceOfValue . (map (parseValueByType (fromOptionallyNamed stype))) . parseSequenceOfValue
@@ -436,7 +441,9 @@ tests = [testParse "TypeA := BOOLEAN"
          testParse "TypeA := SEQUENCE OF CHOICE { s SEQUENCE { o OCTET STRING DEFAULT \'F\'H } }"
                    [ValParsed (TypeAssignment "TypeA" (TypeValParsed (SequenceOfType (Unnamed (TypeValParsed (ChoiceType {choices=[WithName "s" (TypeValParsed (SequenceType [Default (WithName "o" (TypeValParsed OctetStringType)) (OctetStringValue [(B1,B1,B1,B1,B0,B0,B0,B0)])] [] []))]}))))))],
          testParse "valueA SEQUENCE OF BOOLEAN := { TRUE , FALSE }"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceOfType (Unnamed (TypeValParsed BooleanType))), assignmentValue=SequenceOfValue [BooleanValue True, BooleanValue False]})]
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceOfType (Unnamed (TypeValParsed BooleanType))), assignmentValue=SequenceOfValue [BooleanValue True, BooleanValue False]})],
+         testParse "valueA ENUMERATED { a , b } := a"
+         [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a", UnnumberedEnumerationEntry "b"]), assignmentValue=EnumeratedValue "a"})]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
