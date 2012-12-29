@@ -12,7 +12,7 @@ $hexdigit = [0-9A-F]
 $nonzero = 1-9
 $upper = [A-Z]
 $lower = [a-z]
-$alpha = [A-Za-z]
+$idchar = [A-Za-z0-9]
 
 tokens :-
     $white                          ;
@@ -40,8 +40,8 @@ tokens :-
     STRING                          { KeywordToken }
     TRUE                            { KeywordToken }
     FALSE                           { KeywordToken }
-    $upper (\- $alpha | $alpha )*   { TypeOrModuleReferenceToken }
-    $lower (\- $alpha | $alpha )*   { IdentifierOrValueReferenceToken }
+    $upper (\- $idchar | $idchar )* { TypeOrModuleReferenceToken }
+    $lower (\- $idchar | $idchar )* { IdentifierOrValueReferenceToken }
     0      | $nonzero $digit*       { NumberToken . read }
     \'( $bindigit | $white )*\'B    { BStringToken . toBString }
     \'( $hexdigit | $white )*\'H    { HStringToken . toHString }
@@ -99,6 +99,8 @@ lexerTests = [testLex "TypeA ::= BOOLEAN"
               testLex "\'0 011\'B"
                       [BStringToken [B0, B0, B1, B1]],
               testLex "\'A3\'H"
-                      [HStringToken [HA, H3]]
+                      [HStringToken [HA, H3]],
+              testLex "c1 0c2-c-3"
+                      [IdentifierOrValueReferenceToken "c1", NumberToken 0, IdentifierOrValueReferenceToken "c2-c-3"]
               ]
 }
