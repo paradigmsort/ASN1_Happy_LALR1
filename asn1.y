@@ -12,6 +12,7 @@ import Test.HUnit
 %name parseChoiceValue ChoiceValue
 %name parseEnumeratedValue EnumeratedValue
 %name parseIntegerValue IntegerValue
+%name parseNullValue NullValue
 %name parseOctetStringValue OctetStringValue
 %name parseSequenceValue SequenceValue
 %name parseSequenceOfValue SequenceOfValue
@@ -41,6 +42,7 @@ import Test.HUnit
     'DEFAULT'                           { KeywordToken "DEFAULT"}
     'ENUMERATED'                        { KeywordToken "ENUMERATED" }
     'INTEGER'                           { KeywordToken "INTEGER" }
+    'NULL'                              { KeywordToken "NULL" }
     'OCTET'                             { KeywordToken "OCTET" }
     'OF'                                { KeywordToken "OF" }
     'OPTIONAL'                          { KeywordToken "OPTIONAL" }
@@ -75,6 +77,7 @@ BuiltinType : BitStringType { $1 }
             | ChoiceType { $1 }
             | EnumeratedType { $1 }
             | IntegerType { $1 }
+            | NullType { $1 }
             | OctetStringType { $1 }
             | SequenceType { $1 }
             | SequenceOfType { $1 }
@@ -99,6 +102,7 @@ BuiltinValue : BSTRING { [BStringToken $1] } --BitStringValue, OctetStringValue
              | '{' '}' { [KeywordToken "{", KeywordToken "}"] } --SequenceOfValue
              | '{' BuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] }
              | '{' NamedBuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] }
+             | 'NULL' { [KeywordToken "NULL"] } --NullValue
 
 BuiltinValueList : BuiltinValue { $1 }
                  | BuiltinValueList ',' BuiltinValue { $1 ++ [KeywordToken ","] ++ $3 }
@@ -169,6 +173,10 @@ OctetStringType : 'OCTET' 'STRING' { OctetStringType }
 
 OctetStringValue : BSTRING { OctetStringValue (bitsToOctets $1) }
                  | HSTRING { OctetStringValue ((bitsToOctets . hexesToBits) $1) }
+
+NullType : 'NULL' { NullType }
+
+NullValue : 'NULL' { NullValue }
 
 SequenceType : 'SEQUENCE' '{' '}' { SequenceType [] [] [] }
              | 'SEQUENCE' '{' ComponentTypeLists '}' { $3 }
@@ -272,6 +280,7 @@ data ASN1StagedType a b = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1
                         | ChoiceType { choices :: [ASN1WithName a] }
                         | EnumeratedType [ASN1EnumerationEntry]
                         | IntegerType { namedIntegerValues :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] }
+                        | NullType
                         | OctetStringType
                         | SequenceType {
                                          preExtensionComponents :: [ASN1RequiredOptionalOrDefault b (ASN1WithName a )],
@@ -289,6 +298,7 @@ data ASN1Value = BitStringValue [Bit]
                | ChoiceValue { chosen :: String, choiceValue :: ASN1Value }
                | EnumeratedValue String
                | IntegerValue (ASN1BuiltinOrReference Integer)
+               | NullValue
                | OctetStringValue [Octet]
                | SequenceValue [ASN1WithName ASN1Value]
                | SequenceOfValue [ASN1Value] deriving (Show, Eq)
@@ -315,6 +325,7 @@ parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValu
                                            ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)) . parseChoiceValue 
                                            EnumeratedType _ -> parseEnumeratedValue
                                            IntegerType _ -> parseIntegerValue
+                                           NullType -> parseNullValue
                                            OctetStringType -> parseOctetStringValue
                                            SequenceType pre ext post -> SequenceValue . (map (\(name, tokens) -> WithName name (parseValueByType (findTypeInSequenceByName (pre ++ concat ext ++ post) name) tokens))) . parseSequenceValue
                                            SequenceOfType stype -> SequenceOfValue . (map (parseValueByType (fromOptionallyNamed stype))) . parseSequenceOfValue
@@ -330,6 +341,7 @@ parseValuesInType (TypeNoRef t) = TypeValParsed (case t of BitStringType namedBi
                                                            ChoiceType choices -> ChoiceType (map (fmap parseValuesInType) choices)
                                                            EnumeratedType entries -> EnumeratedType entries
                                                            IntegerType namedIntegerValues -> IntegerType namedIntegerValues
+                                                           NullType -> NullType
                                                            OctetStringType -> OctetStringType
                                                            SequenceType pre ext post -> SequenceType (map parseValuesInROD pre)
                                                                                                      (map (map parseValuesInROD) ext)
@@ -370,6 +382,7 @@ resolveTypeComponents as (TypeWithRef t) = TypeNoRef (case t of BitStringType na
                                                                 ChoiceType choices -> ChoiceType (map (fmap (resolveTypeCompletely as)) choices)
                                                                 EnumeratedType entries -> EnumeratedType entries
                                                                 IntegerType namedIntegerValues -> IntegerType namedIntegerValues
+                                                                NullType -> NullType
                                                                 OctetStringType -> OctetStringType
                                                                 SequenceType pre ext post -> SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
                                                                                                           (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
@@ -470,7 +483,9 @@ tests = [testParse "TypeA ::= BOOLEAN"
          testParse "valueA ENUMERATED { a , b } ::= a"
                    [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a", UnnumberedEnumerationEntry "b"]), assignmentValue=EnumeratedValue "a"})],
          testParse "valueA SEQUENCE { b BOOLEAN, c CHOICE { b BOOLEAN } } ::= { b FALSE , c b : TRUE }"
-                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceType [Required (WithName "b" (TypeValParsed BooleanType)), Required (WithName "c" (TypeValParsed (ChoiceType {choices=[WithName "b" (TypeValParsed BooleanType)]})))] [] []), assignmentValue=SequenceValue [WithName "b" (BooleanValue False), WithName "c" (ChoiceValue {chosen="b", choiceValue=BooleanValue True})]})]
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceType [Required (WithName "b" (TypeValParsed BooleanType)), Required (WithName "c" (TypeValParsed (ChoiceType {choices=[WithName "b" (TypeValParsed BooleanType)]})))] [] []), assignmentValue=SequenceValue [WithName "b" (BooleanValue False), WithName "c" (ChoiceValue {chosen="b", choiceValue=BooleanValue True})]})],
+         testParse "valueA NULL ::= NULL"
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed NullType, assignmentValue=NullValue})]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests

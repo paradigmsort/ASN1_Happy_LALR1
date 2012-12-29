@@ -34,6 +34,7 @@ tokens :-
     DEFAULT                         { KeywordToken }
     ENUMERATED                      { KeywordToken }
     INTEGER                         { KeywordToken }
+    NULL                            { KeywordToken }
     OCTET                           { KeywordToken }
     OF                              { KeywordToken }
     OPTIONAL                        { KeywordToken }
