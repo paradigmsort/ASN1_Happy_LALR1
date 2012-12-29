@@ -16,7 +16,7 @@ $alpha = [A-Za-z]
 
 tokens :-
     $white                          ;
-    :=                              { KeywordToken }
+    ::=                              { KeywordToken }
     \.\.\.                          { KeywordToken }
     \[\[                            { KeywordToken }
     \]\]                            { KeywordToken }
@@ -68,12 +68,12 @@ toHString = buildList toHex
 testLex :: String -> [ASN1Token] -> IO()
 testLex input expected = assertEqual input expected (alexScanTokens input)
 
-lexerTests = [testLex "TypeA := BOOLEAN"
-                      [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", KeywordToken "BOOLEAN"],
-              testLex "TypeA := TypeB"
-                      [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", TypeOrModuleReferenceToken "TypeB"],
-              testLex "TypeA := CHOICE { bool BOOLEAN }"
-                      [TypeOrModuleReferenceToken "TypeA", KeywordToken ":=", KeywordToken "CHOICE", KeywordToken "{", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "}"],
+lexerTests = [testLex "TypeA ::= BOOLEAN"
+                      [TypeOrModuleReferenceToken "TypeA", KeywordToken "::=", KeywordToken "BOOLEAN"],
+              testLex "TypeA ::= TypeB"
+                      [TypeOrModuleReferenceToken "TypeA", KeywordToken "::=", TypeOrModuleReferenceToken "TypeB"],
+              testLex "TypeA ::= CHOICE { bool BOOLEAN }"
+                      [TypeOrModuleReferenceToken "TypeA", KeywordToken "::=", KeywordToken "CHOICE", KeywordToken "{", IdentifierOrValueReferenceToken "bool", KeywordToken "BOOLEAN", KeywordToken "}"],
               testLex "INTEGER { two(2) }"
                       [KeywordToken "INTEGER", KeywordToken "{", IdentifierOrValueReferenceToken "two", KeywordToken "(", NumberToken 2, KeywordToken ")", KeywordToken "}"],
               testLex "SEQUENCE OF TypeB"
