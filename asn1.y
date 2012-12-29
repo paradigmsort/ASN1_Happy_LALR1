@@ -97,10 +97,16 @@ BuiltinValue : BSTRING { [BStringToken $1] } --BitStringValue, OctetStringValue
              | '-' NUMBER { [KeywordToken "-", NumberToken $2] }
              | IDENTIFIER_OR_VALUE_REFERENCE { [IdentifierOrValueReferenceToken $1] } -- IntegerValue, EnumeratedValue
              | '{' '}' { [KeywordToken "{", KeywordToken "}"] } --SequenceOfValue
-             | '{' BuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] } 
+             | '{' BuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] }
+             | '{' NamedBuiltinValueList '}' { [KeywordToken "{"] ++ $2 ++ [KeywordToken "}"] }
 
 BuiltinValueList : BuiltinValue { $1 }
                  | BuiltinValueList ',' BuiltinValue { $1 ++ [KeywordToken ","] ++ $3 }
+
+NamedBuiltinValueList : NamedBuiltinValue { $1 }
+                      | NamedBuiltinValueList ',' NamedBuiltinValue { $1 ++ [KeywordToken ","] ++ $3 }
+
+NamedBuiltinValue : IDENTIFIER_OR_VALUE_REFERENCE BuiltinValue { [IdentifierOrValueReferenceToken $1] ++ $2 }
 
 BooleanType : 'BOOLEAN' { BooleanType }
 
@@ -310,7 +316,7 @@ parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValu
                                            EnumeratedType _ -> parseEnumeratedValue
                                            IntegerType _ -> parseIntegerValue
                                            OctetStringType -> parseOctetStringValue
-                                           SequenceType pre ext post -> SequenceValue . (map (\(name, tokens) -> WithName name (BooleanValue True))) . parseSequenceValue
+                                           SequenceType pre ext post -> SequenceValue . (map (\(name, tokens) -> WithName name (parseValueByType (findTypeInSequenceByName (pre ++ concat ext ++ post) name) tokens))) . parseSequenceValue
                                            SequenceOfType stype -> SequenceOfValue . (map (parseValueByType (fromOptionallyNamed stype))) . parseSequenceOfValue
 
 parseValuesInROD :: ASN1RequiredOptionalOrDefault [ASN1Token] (ASN1WithName ASN1TypeNoRef) -> ASN1RequiredOptionalOrDefault ASN1Value (ASN1WithName ASN1TypeValueParsed)
@@ -330,8 +336,17 @@ parseValuesInType (TypeNoRef t) = TypeValParsed (case t of BitStringType namedBi
                                                                                                      (map parseValuesInROD post)
                                                            SequenceOfType stype -> SequenceOfType (fmap parseValuesInType stype))
 
+stripROD :: ASN1RequiredOptionalOrDefault b a -> a
+stripROD (Required a) =  a
+stripROD (Optional a) =  a
+stripROD (Default a b) = a
+
 isNamed :: String -> ASN1WithName a -> Bool
 isNamed name (WithName named _) = name == named
+
+findTypeInSequenceByName :: [ASN1RequiredOptionalOrDefault v (ASN1WithName ASN1TypeNoRef)] -> String -> ASN1TypeNoRef
+findTypeInSequenceByName as n = case find (isNamed n) (map stripROD as) of Nothing -> error ("could not find sequence " ++ n)
+                                                                           Just (WithName _ namedType) -> namedType
 
 findTypeInChoicesByName :: [ASN1WithName ASN1TypeNoRef] -> String -> ASN1TypeNoRef
 findTypeInChoicesByName as n = case find (isNamed n) as of Nothing -> error ("could not find choice " ++ n)
@@ -453,7 +468,9 @@ tests = [testParse "TypeA ::= BOOLEAN"
          testParse "valueA SEQUENCE OF BOOLEAN ::= { TRUE , FALSE }"
                    [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceOfType (Unnamed (TypeValParsed BooleanType))), assignmentValue=SequenceOfValue [BooleanValue True, BooleanValue False]})],
          testParse "valueA ENUMERATED { a , b } ::= a"
-         [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a", UnnumberedEnumerationEntry "b"]), assignmentValue=EnumeratedValue "a"})]
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a", UnnumberedEnumerationEntry "b"]), assignmentValue=EnumeratedValue "a"})],
+         testParse "valueA SEQUENCE { b BOOLEAN, c CHOICE { b BOOLEAN } } ::= { b FALSE , c b : TRUE }"
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (SequenceType [Required (WithName "b" (TypeValParsed BooleanType)), Required (WithName "c" (TypeValParsed (ChoiceType {choices=[WithName "b" (TypeValParsed BooleanType)]})))] [] []), assignmentValue=SequenceValue [WithName "b" (BooleanValue False), WithName "c" (ChoiceValue {chosen="b", choiceValue=BooleanValue True})]})]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
