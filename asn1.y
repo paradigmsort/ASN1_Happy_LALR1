@@ -259,12 +259,6 @@ ValueList : Value { [$1] }
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
-data ASN1StagedAssignment a b = TypeAssignment { name :: String, asn1Type::a }
-                              | ValueAssignment { name :: String, asn1Type::a, assignmentValue::b } deriving (Show, Eq)
-data ASN1Assignment = WithRef (ASN1StagedAssignment (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
-data ASN1TypeNoRefAssignment = NoRef (ASN1StagedAssignment ASN1TypeNoRef [ASN1Token]) deriving (Show, Eq)
-data ASN1ValueParsedAssignment = ValParsed (ASN1StagedAssignment ASN1TypeValueParsed ASN1Value) deriving (Show, Eq)
-
 data ASN1WithName a = WithName String a deriving (Show, Eq)
 data ASN1OptionallyNamed a = Unnamed a
                            | Named (ASN1WithName a) deriving (Show, Eq)
@@ -273,8 +267,16 @@ data ASN1BuiltinOrReference a = Builtin a
 data ASN1RequiredOptionalOrDefault b a = Required a
                                        | Optional a 
                                        | Default a b deriving (Show, Eq)
+
+data ASN1StagedAssignment a b = TypeAssignment { name :: String, asn1Type::a }
+                              | ValueAssignment { name :: String, asn1Type::a, assignmentValue::b } deriving (Show, Eq)
+data ASN1Assignment = WithRef (ASN1StagedAssignment (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
+data ASN1TypeNoRefAssignment = NoRef (ASN1StagedAssignment ASN1TypeNoRef [ASN1Token]) deriving (Show, Eq)
+data ASN1ValueParsedAssignment = ValParsed (ASN1StagedAssignment ASN1TypeValueParsed ASN1Value) deriving (Show, Eq)
+
 data ASN1EnumerationEntry = UnnumberedEnumerationEntry String
                           | NumberedEnumerationEntry (ASN1WithName (ASN1BuiltinOrReference Integer)) deriving (Show, Eq)
+
 data ASN1StagedType a b = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] }
                         | BooleanType
                         | ChoiceType { choices :: [ASN1WithName a] }
@@ -288,7 +290,6 @@ data ASN1StagedType a b = BitStringType { namedBits :: Maybe [ASN1WithName (ASN1
                                          postExtensionComponents :: [ASN1RequiredOptionalOrDefault b (ASN1WithName a )]
                                        }
                         | SequenceOfType (ASN1OptionallyNamed a) deriving (Show, Eq)
-
 data ASN1TypeWithRef = TypeWithRef (ASN1StagedType (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
 data ASN1TypeNoRef = TypeNoRef (ASN1StagedType ASN1TypeNoRef [ASN1Token]) deriving (Show, Eq)
 data ASN1TypeValueParsed = TypeValParsed (ASN1StagedType ASN1TypeValueParsed ASN1Value) deriving (Show, Eq)
