@@ -24,7 +24,7 @@ import Test.HUnit
     NUMBER                              { NumberToken $$ }
     BSTRING                             { BStringToken $$ }
     HSTRING                             { HStringToken $$ }
-    '::='                                { KeywordToken "::=" }
+    '::='                               { KeywordToken "::=" }
     '...'                               { KeywordToken "..." }
     '[['                                { KeywordToken "[[" }
     ']]'                                { KeywordToken "]]" }
