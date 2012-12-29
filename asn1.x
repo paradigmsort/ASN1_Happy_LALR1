@@ -16,7 +16,8 @@ $idchar = [A-Za-z0-9]
 
 tokens :-
     $white                          ;
-    ::=                              { KeywordToken }
+    \-\-.*\n                        ;
+    ::=                             { KeywordToken }
     \.\.\.                          { KeywordToken }
     \[\[                            { KeywordToken }
     \]\]                            { KeywordToken }
@@ -101,6 +102,8 @@ lexerTests = [testLex "TypeA ::= BOOLEAN"
               testLex "\'A3\'H"
                       [HStringToken [HA, H3]],
               testLex "c1 0c2-c-3"
-                      [IdentifierOrValueReferenceToken "c1", NumberToken 0, IdentifierOrValueReferenceToken "c2-c-3"]
+                      [IdentifierOrValueReferenceToken "c1", NumberToken 0, IdentifierOrValueReferenceToken "c2-c-3"],
+              testLex "c-1--c2\n-"
+                      [IdentifierOrValueReferenceToken "c-1", KeywordToken "-"]
               ]
 }
