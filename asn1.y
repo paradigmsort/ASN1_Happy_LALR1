@@ -322,7 +322,7 @@ fromOptionallyNamed (Named (WithName n a)) = a
 parseValueByType :: ASN1TypeNoRef -> [ASN1Token] -> ASN1Value
 parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValue
                                            BooleanType -> parseBooleanValue
-                                           ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findTypeInChoicesByName choices choice) tokens)) . parseChoiceValue 
+                                           ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findByName choices choice) tokens)) . parseChoiceValue 
                                            EnumeratedType _ -> parseEnumeratedValue
                                            IntegerType _ -> parseIntegerValue
                                            NullType -> parseNullValue
@@ -356,13 +356,12 @@ stripROD (Default a b) = a
 isNamed :: String -> ASN1WithName a -> Bool
 isNamed name (WithName named _) = name == named
 
-findTypeInSequenceByName :: [ASN1RequiredOptionalOrDefault v (ASN1WithName ASN1TypeNoRef)] -> String -> ASN1TypeNoRef
-findTypeInSequenceByName as n = case find (isNamed n) (map stripROD as) of Nothing -> error ("could not find sequence " ++ n)
-                                                                           Just (WithName _ namedType) -> namedType
+findByName :: [ASN1WithName a] -> String -> a
+findByName as n = case find (isNamed n) as of Nothing -> error ("could not find" ++ n)
+                                              Just (WithName _ a) -> a
 
-findTypeInChoicesByName :: [ASN1WithName ASN1TypeNoRef] -> String -> ASN1TypeNoRef
-findTypeInChoicesByName as n = case find (isNamed n) as of Nothing -> error ("could not find choice " ++ n)
-                                                           Just (WithName _ namedType) -> namedType
+findTypeInSequenceByName :: [ASN1RequiredOptionalOrDefault v (ASN1WithName ASN1TypeNoRef)] -> String -> ASN1TypeNoRef
+findTypeInSequenceByName as = findByName (map stripROD as)
 
 definesType :: String -> ASN1Assignment -> Bool
 definesType name (WithRef (TypeAssignment n t)) = n == name
