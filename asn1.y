@@ -406,7 +406,7 @@ parseValueInAssignment (NoRef (TypeAssignment n t)) = ValParsed (TypeAssignment 
 parseValueInAssignment (NoRef (ValueAssignment n t v)) = ValParsed (ValueAssignment n (parseValuesInType t) (parseValueByType t v))
 
 parseValues :: [ASN1TypeNoRefAssignment] -> [ASN1ValueParsedAssignment]
-parseValues x = map parseValueInAssignment x
+parseValues = map parseValueInAssignment
 
 testParse :: String -> [ASN1ValueParsedAssignment] -> IO ()
 testParse input expected = assertEqual input expected ((parseValues . resolveTypes . parse . alexScanTokens) input)
