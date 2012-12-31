@@ -320,12 +320,18 @@ fromOptionallyNamed :: ASN1OptionallyNamed a -> a
 fromOptionallyNamed (Unnamed a) = a
 fromOptionallyNamed (Named (WithName n a)) = a
 
+resolveIntLocal :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] -> ASN1Value -> ASN1Value
+resolveIntLocal (Just xs) (IntegerValue (Reference n)) = case find (isNamed n) xs of Nothing -> IntegerValue (Reference n)
+                                                                                     Just (WithName _ (Builtin v)) -> IntegerValue (Builtin v)
+                                                                                     Just (WithName _ (Reference r)) -> resolveIntLocal (Just xs) (IntegerValue (Reference r))
+resolveIntLocal _ x = x
+
 parseValueByType :: ASN1TypeNoRef -> [ASN1Token] -> ASN1Value
 parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValue
                                            BooleanType -> parseBooleanValue
                                            ChoiceType choices -> (\(choice, tokens) -> ChoiceValue choice (parseValueByType (findByName choices choice) tokens)) . parseChoiceValue 
                                            EnumeratedType _ _ -> parseEnumeratedValue
-                                           IntegerType _ -> parseIntegerValue
+                                           IntegerType mlist -> (resolveIntLocal mlist) . parseIntegerValue
                                            NullType -> parseNullValue
                                            OctetStringType -> parseOctetStringValue
                                            SequenceType pre ext post -> SequenceValue . (map (\(name, tokens) -> WithName name (parseValueByType (findTypeInSequenceByName (pre ++ concat ext ++ post) name) tokens))) . parseSequenceValue
@@ -489,7 +495,9 @@ tests = [testParse "TypeA ::= BOOLEAN"
          testParse "TypeA ::= ENUMERATED { a, b , ... }"
                    [ValParsed (TypeAssignment "TypeA" (TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a", UnnumberedEnumerationEntry "b"] (Just []))))],
          testParse "TypeA ::= ENUMERATED { a, ... , b }"
-                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a"] (Just [UnnumberedEnumerationEntry "b"]))))]
+                   [ValParsed (TypeAssignment "TypeA" (TypeValParsed (EnumeratedType [UnnumberedEnumerationEntry "a"] (Just [UnnumberedEnumerationEntry "b"]))))],
+         testParse "valueA INTEGER { five(5) } ::= five"
+                   [ValParsed (ValueAssignment {name="valueA", asn1Type=TypeValParsed (IntegerType {namedIntegerValues = Just [WithName "five" (Builtin 5)]}), assignmentValue=IntegerValue (Builtin 5)})]
         ] ++ lexerTests
 
 main = foldr (>>) (putStrLn "OK") tests
