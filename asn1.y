@@ -2,6 +2,7 @@
 module ASN1 where
 import ASN1Lexer
 import BasicTypes
+import ASN1Types
 import Data.List
 import Test.HUnit
 }
@@ -259,15 +260,6 @@ ValueList : Value { [$1] }
 parseError :: [ASN1Token] -> a
 parseError token = error ("Parse Error, remaining: " ++ show token)
 
-data ASN1WithName a = WithName String a deriving (Show, Eq)
-data ASN1OptionallyNamed a = Unnamed a
-                           | Named (ASN1WithName a) deriving (Show, Eq)
-data ASN1BuiltinOrReference a = Builtin a 
-                              | Reference String deriving (Show, Eq)
-data ASN1RequiredOptionalOrDefault b a = Required a
-                                       | Optional a 
-                                       | Default a b deriving (Show, Eq)
-
 data ASN1StagedAssignment a b = TypeAssignment { name :: String, asn1Type::a }
                               | ValueAssignment { name :: String, asn1Type::a, assignmentValue::b } deriving (Show, Eq)
 data ASN1Assignment = WithRef (ASN1StagedAssignment (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
@@ -286,9 +278,9 @@ data ASN1StagedType a b c = BitStringType { namedBits :: Maybe [ASN1WithName c] 
                           | NullType
                           | OctetStringType
                           | SequenceType {
-                                           preExtensionComponents :: [ASN1RequiredOptionalOrDefault b (ASN1WithName a )],
-                                           extensonAdditions :: [[ASN1RequiredOptionalOrDefault b (ASN1WithName a )]],
-                                           postExtensionComponents :: [ASN1RequiredOptionalOrDefault b (ASN1WithName a )]
+                                           preExtensionComponents :: [ASN1RequiredOptionalOrDefault (ASN1WithName a ) b],
+                                           extensonAdditions :: [[ASN1RequiredOptionalOrDefault (ASN1WithName a ) b]],
+                                           postExtensionComponents :: [ASN1RequiredOptionalOrDefault (ASN1WithName a ) b]
                                          }
                           | SequenceOfType (ASN1OptionallyNamed a) deriving (Show, Eq)
 data ASN1TypeWithRef = TypeWithRef (ASN1StagedType (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token] (ASN1BuiltinOrReference Integer)) deriving (Show, Eq)
@@ -308,22 +300,6 @@ data ASN1StagedValue a = BitStringValue [Bit]
 type ASN1ParsedValue = ASN1StagedValue (ASN1BuiltinOrReference Integer)
 type ASN1Value = ASN1StagedValue Integer
 
-instance Functor ASN1WithName where
-  fmap f (WithName n x) = WithName n (f x)
-
-instance Functor ASN1OptionallyNamed where
-  fmap f (Unnamed x) = Unnamed (f x)
-  fmap f (Named x) = Named (fmap f x)
-
-instance Functor (ASN1RequiredOptionalOrDefault b) where
-  fmap f (Required a) = Required (f a)
-  fmap f (Optional a) = Optional (f a)
-  fmap f (Default a b) = Default (f a) b
-
-fromOptionallyNamed :: ASN1OptionallyNamed a -> a
-fromOptionallyNamed (Unnamed a) = a
-fromOptionallyNamed (Named (WithName n a)) = a
-
 resolveIntLocal :: Maybe [ASN1WithName (ASN1BuiltinOrReference Integer)] -> ASN1ParsedValue -> ASN1ParsedValue
 resolveIntLocal (Just xs) (IntegerValue (Reference n)) = case find (isNamed n) xs of Nothing -> IntegerValue (Reference n)
                                                                                      Just (WithName _ (Builtin v)) -> IntegerValue (Builtin v)
@@ -341,10 +317,8 @@ parseValueByType (TypeNoRef t) = case t of BitStringType _ -> parseBitStringValu
                                            SequenceType pre ext post -> SequenceValue . (map (\(name, tokens) -> WithName name (parseValueByType (findTypeInSequenceByName (pre ++ concat ext ++ post) name) tokens))) . parseSequenceValue
                                            SequenceOfType stype -> SequenceOfValue . (map (parseValueByType (fromOptionallyNamed stype))) . parseSequenceOfValue
 
-parseValuesInROD :: ASN1RequiredOptionalOrDefault [ASN1Token] (ASN1WithName ASN1TypeNoRef) -> ASN1RequiredOptionalOrDefault ASN1ParsedValue (ASN1WithName ASN1TypeValueParsed)
-parseValuesInROD (Required (WithName n t)) = Required (WithName n (parseValuesInType t))
-parseValuesInROD (Optional (WithName n t)) = Optional (WithName n (parseValuesInType t))
-parseValuesInROD (Default (WithName n t) v) = Default (WithName n (parseValuesInType t)) (parseValueByType t v)
+parseValuesInROD :: ASN1RequiredOptionalOrDefault (ASN1WithName ASN1TypeNoRef) [ASN1Token] -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1TypeValueParsed) ASN1ParsedValue
+parseValuesInROD rod = dfmap (fmap parseValuesInType) (parseValueByType ((stripName . stripROD) rod)) rod
 
 parseValuesInType :: ASN1TypeNoRef -> ASN1TypeValueParsed
 parseValuesInType (TypeNoRef t) = TypeValParsed (case t of BitStringType namedBits -> BitStringType namedBits
@@ -359,10 +333,8 @@ parseValuesInType (TypeNoRef t) = TypeValParsed (case t of BitStringType namedBi
                                                                                                      (map parseValuesInROD post)
                                                            SequenceOfType stype -> SequenceOfType (fmap parseValuesInType stype))
 
-resolveValuesInROD :: [ASN1ValueParsedAssignment] -> ASN1RequiredOptionalOrDefault ASN1ParsedValue (ASN1WithName ASN1TypeValueParsed) -> ASN1RequiredOptionalOrDefault ASN1Value (ASN1WithName ASN1Type)
-resolveValuesInROD as (Required (WithName n t)) = Required (WithName n (resolveValuesInType as t))
-resolveValuesInROD as (Optional (WithName n t)) = Optional (WithName n (resolveValuesInType as t))
-resolveValuesInROD as (Default (WithName n t) v) = Default (WithName n (resolveValuesInType as t)) (resolveValueComponents as v)
+resolveValuesInROD :: [ASN1ValueParsedAssignment] -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1TypeValueParsed) ASN1ParsedValue -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1Type) ASN1Value
+resolveValuesInROD as = dfmap (fmap (resolveValuesInType as)) (resolveValueComponents as)
 
 resolveValuesInType :: [ASN1ValueParsedAssignment] -> ASN1TypeValueParsed -> ASN1Type
 resolveValuesInType as (TypeValParsed t) = Type (case t of BitStringType namedBits -> BitStringType (fmap (map (fmap (resolveIntegerReference as))) namedBits)
@@ -377,19 +349,11 @@ resolveValuesInType as (TypeValParsed t) = Type (case t of BitStringType namedBi
                                                                                                      (map (resolveValuesInROD as) post)
                                                            SequenceOfType stype -> SequenceOfType (fmap (resolveValuesInType as) stype))
 
-stripROD :: ASN1RequiredOptionalOrDefault b a -> a
-stripROD (Required a) =  a
-stripROD (Optional a) =  a
-stripROD (Default a b) = a
-
-isNamed :: String -> ASN1WithName a -> Bool
-isNamed name (WithName named _) = name == named
-
 findByName :: [ASN1WithName a] -> String -> a
 findByName as n = case find (isNamed n) as of Nothing -> error ("could not find" ++ n)
                                               Just (WithName _ a) -> a
 
-findTypeInSequenceByName :: [ASN1RequiredOptionalOrDefault v (ASN1WithName ASN1TypeNoRef)] -> String -> ASN1TypeNoRef
+findTypeInSequenceByName :: [ASN1RequiredOptionalOrDefault (ASN1WithName ASN1TypeNoRef) v] -> String -> ASN1TypeNoRef
 findTypeInSequenceByName as = findByName (map stripROD as)
 
 definesType :: String -> ASN1Assignment -> Bool
@@ -435,9 +399,9 @@ resolveTypeComponents as (TypeWithRef t) = TypeNoRef (case t of BitStringType na
                                                                 IntegerType namedIntegerValues -> IntegerType namedIntegerValues
                                                                 NullType -> NullType
                                                                 OctetStringType -> OctetStringType
-                                                                SequenceType pre ext post -> SequenceType (map (fmap (fmap (resolveTypeCompletely as))) pre)
-                                                                                                          (map (map (fmap (fmap (resolveTypeCompletely as)))) ext)
-                                                                                                          (map (fmap (fmap (resolveTypeCompletely as))) post)
+                                                                SequenceType pre ext post -> SequenceType (map (dfmap (fmap (resolveTypeCompletely as)) id) pre)
+                                                                                                          (map (map (dfmap (fmap (resolveTypeCompletely as)) id)) ext)
+                                                                                                          (map (dfmap (fmap (resolveTypeCompletely as)) id) post)
                                                                 SequenceOfType stype -> SequenceOfType (fmap (resolveTypeCompletely as) stype))
 
 resolveTypeCompletely :: [ASN1Assignment] -> ASN1BuiltinOrReference ASN1TypeWithRef -> ASN1TypeNoRef
