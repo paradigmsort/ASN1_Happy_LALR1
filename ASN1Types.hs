@@ -33,6 +33,10 @@ fromOptionallyNamed (Named (WithName n a)) = a
 data ASN1BuiltinOrReference a = Builtin a 
                               | Reference String deriving (Show, Eq)
 
+resolveReference :: (x -> String -> ASN1BuiltinOrReference a) -> x -> ASN1BuiltinOrReference a -> a
+resolveReference _ _ (Builtin a) = a
+resolveReference f x (Reference r) = resolveReference f x (f x r)
+
 data ASN1RequiredOptionalOrDefault a b = Required a
                                        | Optional a 
                                        | Default a b deriving (Show, Eq)

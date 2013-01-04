@@ -272,10 +272,6 @@ definesType :: String -> ASN1AssignmentTypeRefUnparsedValue -> Bool
 definesType name (TypeRefUnparsedValue (TypeAssignment n t)) = n == name
 definesType name (TypeRefUnparsedValue (ValueAssignment _ _ _)) = False
 
-findTypeByName :: [ASN1AssignmentTypeRefUnparsedValue] -> String -> ASN1BuiltinOrReference ASN1TypeWithRef
-findTypeByName as n = case find (definesType n) as of Nothing -> error ("could not resolve reference to type " ++ n)
-                                                      Just (TypeRefUnparsedValue (TypeAssignment n t)) -> t
-
 -- Stage 0 -> Stage 1 (Resolve type references)
 resolveTypes :: [ASN1AssignmentTypeRefUnparsedValue] -> [ASN1AssignmentUnparsedValue]
 resolveTypes x = map (resolveTypesInAssignment x) x
@@ -287,8 +283,11 @@ resolveTypeCompletely :: [ASN1AssignmentTypeRefUnparsedValue] -> ASN1BuiltinOrRe
 resolveTypeCompletely as = (resolveTypeComponents as) . (resolveTypeReference as)
 
 resolveTypeReference :: [ASN1AssignmentTypeRefUnparsedValue] -> ASN1BuiltinOrReference ASN1TypeWithRef -> ASN1TypeWithRef
-resolveTypeReference as (Builtin b) = b
-resolveTypeReference as (Reference r) = ((resolveTypeReference as) . (findTypeByName as)) r
+resolveTypeReference = resolveReference findTypeByName
+
+findTypeByName :: [ASN1AssignmentTypeRefUnparsedValue] -> String -> ASN1BuiltinOrReference ASN1TypeWithRef
+findTypeByName as n = case find (definesType n) as of Nothing -> error ("could not resolve reference to type " ++ n)
+                                                      Just (TypeRefUnparsedValue (TypeAssignment n t)) -> t
 
 resolveTypeComponents :: [ASN1AssignmentTypeRefUnparsedValue] -> ASN1TypeWithRef -> ASN1TypeNoRef
 resolveTypeComponents as (TypeWithRef t) = TypeNoRef (case t of BitStringType namedBits -> BitStringType namedBits
@@ -364,8 +363,7 @@ resolveValuesInType as (TypeValParsed t) = Type (case t of BitStringType namedBi
                                                            SequenceOfType stype -> SequenceOfType (fmap (resolveValuesInType as) stype))
 
 resolveIntegerReference :: [ASN1AssignmentIntRef] -> ASN1BuiltinOrReference Integer -> Integer
-resolveIntegerReference _ (Builtin i) = i
-resolveIntegerReference as (Reference r) = ((resolveIntegerReference as) . (findIntegerByName as)) r
+resolveIntegerReference = resolveReference findIntegerByName
 
 findIntegerByName :: [ASN1AssignmentIntRef] -> String -> ASN1BuiltinOrReference Integer
 findIntegerByName as n = case find (isIntegerNamed n) as of Nothing -> error ("could not resolve reference to integer " ++ n)
@@ -377,7 +375,6 @@ isIntegerNamed name _ = False
 
 resolveValuesInROD :: [ASN1AssignmentIntRef] -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1TypeValueParsed) ASN1ParsedValue -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1Type) ASN1Value
 resolveValuesInROD as = dfmap (fmap (resolveValuesInType as)) (resolveValueComponents as)
-
 
 resolveValueComponents :: [ASN1AssignmentIntRef] -> ASN1ParsedValue -> ASN1Value
 resolveValueComponents as t = case t of BitStringValue bits -> BitStringValue bits
