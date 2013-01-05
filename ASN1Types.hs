@@ -83,6 +83,20 @@ data ASN1StagedType a b c = BitStringType { namedBits :: Maybe [ASN1WithName c] 
                                            postExtensionComponents :: [ASN1RequiredOptionalOrDefault (ASN1WithName a ) b]
                                          }
                           | SequenceOfType (ASN1OptionallyNamed a) deriving (Show, Eq)
+
+instance TripleFunctor ASN1StagedType where
+  tfmap _ _ h (BitStringType namedBits) = BitStringType (fmap (map (fmap h)) namedBits)
+  tfmap _ _ _ BooleanType = BooleanType
+  tfmap f _ _ (ChoiceType choices) = ChoiceType (map (fmap f) choices)
+  tfmap _ _ _ (EnumeratedType entry ext) = EnumeratedType entry ext
+  tfmap _ _ h (IntegerType namedIntegerValues) = IntegerType (fmap (map (fmap h)) namedIntegerValues)
+  tfmap _ _ _ NullType = NullType
+  tfmap _ _ _ OctetStringType = OctetStringType
+  tfmap f g _ (SequenceType pre ext post) = SequenceType (map (dfmap (fmap f) g) pre)
+                                                         (map (map (dfmap (fmap f) g)) ext)
+                                                         (map (dfmap (fmap f) g) post)
+  tfmap f _ _ (SequenceOfType stype) = SequenceOfType (fmap f stype)
+
 data ASN1TypeWithRef = TypeWithRef (ASN1StagedType (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token] (ASN1BuiltinOrReference Integer)) deriving (Show, Eq)
 data ASN1TypeNoRef = TypeNoRef (ASN1StagedType ASN1TypeNoRef [ASN1Token] (ASN1BuiltinOrReference Integer)) deriving (Show, Eq)
 data ASN1TypeValueParsed = TypeValParsed (ASN1StagedType ASN1TypeValueParsed ASN1ParsedValue (ASN1BuiltinOrReference Integer)) deriving (Show, Eq)

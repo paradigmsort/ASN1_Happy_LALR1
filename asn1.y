@@ -290,17 +290,7 @@ findTypeByName as n = case find (definesType n) as of Nothing -> error ("could n
                                                       Just (TypeRefUnparsedValue (TypeAssignment n t)) -> t
 
 resolveTypeComponents :: [ASN1AssignmentTypeRefUnparsedValue] -> ASN1TypeWithRef -> ASN1TypeNoRef
-resolveTypeComponents as (TypeWithRef t) = TypeNoRef (case t of BitStringType namedBits -> BitStringType namedBits
-                                                                BooleanType -> BooleanType
-                                                                ChoiceType choices -> ChoiceType (map (fmap (resolveTypeCompletely as)) choices)
-                                                                EnumeratedType entries ext -> EnumeratedType entries ext
-                                                                IntegerType namedIntegerValues -> IntegerType namedIntegerValues
-                                                                NullType -> NullType
-                                                                OctetStringType -> OctetStringType
-                                                                SequenceType pre ext post -> SequenceType (map (dfmap (fmap (resolveTypeCompletely as)) id) pre)
-                                                                                                          (map (map (dfmap (fmap (resolveTypeCompletely as)) id)) ext)
-                                                                                                          (map (dfmap (fmap (resolveTypeCompletely as)) id) post)
-                                                                SequenceOfType stype -> SequenceOfType (fmap (resolveTypeCompletely as) stype))
+resolveTypeComponents as (TypeWithRef t) = TypeNoRef (tfmap (resolveTypeCompletely as) id id t)
 
 -- Stage 1 -> Stage 2 (Parse values based on their type)
 parseValues :: [ASN1AssignmentUnparsedValue] -> [ASN1AssignmentIntRef]
@@ -350,17 +340,7 @@ resolveValuesInAssignment :: [ASN1AssignmentIntRef] -> ASN1AssignmentIntRef -> A
 resolveValuesInAssignment as (IntRef x) = Assignment (dfmap (resolveValuesInType as) (resolveValueComponents as) x)
 
 resolveValuesInType :: [ASN1AssignmentIntRef] -> ASN1TypeValueParsed -> ASN1Type
-resolveValuesInType as (TypeValParsed t) = Type (case t of BitStringType namedBits -> BitStringType (fmap (map (fmap (resolveIntegerReference as))) namedBits)
-                                                           BooleanType -> BooleanType
-                                                           ChoiceType choices -> ChoiceType (map (fmap (resolveValuesInType as)) choices)
-                                                           EnumeratedType entries ext -> EnumeratedType entries ext
-                                                           IntegerType namedIntegerValues -> IntegerType (fmap (map (fmap (resolveIntegerReference as))) namedIntegerValues)
-                                                           NullType -> NullType
-                                                           OctetStringType -> OctetStringType
-                                                           SequenceType pre ext post -> SequenceType (map (resolveValuesInROD as) pre)
-                                                                                                     (map (map (resolveValuesInROD as)) ext)
-                                                                                                     (map (resolveValuesInROD as) post)
-                                                           SequenceOfType stype -> SequenceOfType (fmap (resolveValuesInType as) stype))
+resolveValuesInType as (TypeValParsed t) = Type (tfmap (resolveValuesInType as) (resolveValueComponents as) (resolveIntegerReference as) t)
 
 resolveIntegerReference :: [ASN1AssignmentIntRef] -> ASN1BuiltinOrReference Integer -> Integer
 resolveIntegerReference = resolveReference findIntegerByName
@@ -372,9 +352,6 @@ findIntegerByName as n = case find (isIntegerNamed n) as of Nothing -> error ("c
 isIntegerNamed :: String -> ASN1AssignmentIntRef -> Bool
 isIntegerNamed name (IntRef (ValueAssignment n _ (IntegerValue _))) = n == name
 isIntegerNamed name _ = False
-
-resolveValuesInROD :: [ASN1AssignmentIntRef] -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1TypeValueParsed) ASN1ParsedValue -> ASN1RequiredOptionalOrDefault (ASN1WithName ASN1Type) ASN1Value
-resolveValuesInROD as = dfmap (fmap (resolveValuesInType as)) (resolveValueComponents as)
 
 resolveValueComponents :: [ASN1AssignmentIntRef] -> ASN1ParsedValue -> ASN1Value
 resolveValueComponents as t = case t of BitStringValue bits -> BitStringValue bits
