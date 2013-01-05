@@ -111,5 +111,17 @@ data ASN1StagedValue a = BitStringValue [Bit]
                        | OctetStringValue [Octet]
                        | SequenceValue [ASN1WithName (ASN1StagedValue a)]
                        | SequenceOfValue [ASN1StagedValue a] deriving (Show, Eq)
+
+instance Functor ASN1StagedValue where
+  fmap f (BitStringValue bits) = BitStringValue bits
+  fmap f (BooleanValue b) = BooleanValue b
+  fmap f (ChoiceValue chosen choiceValue) = ChoiceValue chosen (fmap f choiceValue)
+  fmap f (EnumeratedValue s) = EnumeratedValue s
+  fmap f (IntegerValue intVal) = IntegerValue (f intVal)
+  fmap f NullValue = NullValue
+  fmap f (OctetStringValue octets) = OctetStringValue octets
+  fmap f (SequenceValue namedValues) = SequenceValue (map (fmap (fmap f)) namedValues)
+  fmap f (SequenceOfValue values) = SequenceOfValue (map (fmap f) values)
+
 type ASN1ParsedValue = ASN1StagedValue (ASN1BuiltinOrReference Integer)
 type ASN1Value = ASN1StagedValue Integer

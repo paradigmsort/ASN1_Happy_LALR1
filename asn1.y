@@ -354,15 +354,7 @@ isIntegerNamed name (IntRef (ValueAssignment n _ (IntegerValue _))) = n == name
 isIntegerNamed name _ = False
 
 resolveValueComponents :: [ASN1AssignmentIntRef] -> ASN1ParsedValue -> ASN1Value
-resolveValueComponents as t = case t of BitStringValue bits -> BitStringValue bits
-                                        BooleanValue b -> BooleanValue b
-                                        ChoiceValue chosen choice -> ChoiceValue chosen (resolveValueComponents as choice)
-                                        EnumeratedValue name -> EnumeratedValue name
-                                        IntegerValue refval -> IntegerValue (resolveIntegerReference as refval)
-                                        NullValue -> NullValue
-                                        OctetStringValue octets -> OctetStringValue octets
-                                        SequenceValue namedValues -> SequenceValue (map (fmap (resolveValueComponents as)) namedValues)
-                                        SequenceOfValue values -> SequenceOfValue (map (resolveValueComponents as) values)
+resolveValueComponents as = fmap (resolveIntegerReference as)
 
 --Unit tests
 testParse :: String -> [ASN1Assignment] -> IO ()
