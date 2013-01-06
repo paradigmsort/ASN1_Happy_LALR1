@@ -51,16 +51,24 @@ stripROD (Required a) =  a
 stripROD (Optional a) =  a
 stripROD (Default a b) = a
 
-data ASN1StagedAssignment a b = TypeAssignment { name :: String, asn1Type::a }
-                              | ValueAssignment { name :: String, asn1Type::a, assignmentValue::b } deriving (Show, Eq)
-
-typeFromAssignment :: ASN1StagedAssignment a b -> a
-typeFromAssignment (TypeAssignment _ t) = t
-typeFromAssignment (ValueAssignment _ t _) = t
-
+data ASN1StagedAssignment a b = StagedAssignment (ASN1WithName (ASN1StagedAssigned a b)) deriving (Show, Eq)
 instance DoubleFunctor ASN1StagedAssignment where
-  dfmap f _ (TypeAssignment name a) = TypeAssignment name (f a)
-  dfmap f g (ValueAssignment name a b) = ValueAssignment name (f a) (g b)
+  dfmap f g (StagedAssignment x) = StagedAssignment (fmap (dfmap f g) x)
+
+data ASN1StagedAssigned a b = TypeAssignment { asn1Type::a }
+                            | ValueAssignment { asn1Type::a, assignmentValue::b } deriving (Show, Eq)
+
+typeFromAssigned :: ASN1StagedAssigned a b -> a
+typeFromAssigned (TypeAssignment t) = t
+typeFromAssigned (ValueAssignment t _) = t
+
+isTypeAssigned :: ASN1StagedAssigned a b -> Bool
+isTypeAssigned (TypeAssignment _) = True
+isTypeAssigned (ValueAssignment _ _) = False
+
+instance DoubleFunctor ASN1StagedAssigned where
+  dfmap f _ (TypeAssignment a) = TypeAssignment (f a)
+  dfmap f g (ValueAssignment a b) = ValueAssignment (f a) (g b)
 
 newtype ASN1AssignmentTypeRefUnparsedValue = TypeRefUnparsedValue (ASN1StagedAssignment (ASN1BuiltinOrReference ASN1TypeWithRef) [ASN1Token]) deriving (Show, Eq)
 newtype ASN1AssignmentUnparsedValue = UnparsedValue (ASN1StagedAssignment ASN1TypeNoRef [ASN1Token]) deriving (Show, Eq)
